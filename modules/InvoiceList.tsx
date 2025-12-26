@@ -1,10 +1,10 @@
-
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Plus, Filter, FileText, Download, Edit2, Ban, CheckCircle, Clock, XCircle, MessageCircle } from 'lucide-react';
+import { Search, Plus, FileText, Edit2, Ban, CheckCircle, XCircle, MessageCircle, Mail, Send, X, Loader2, Check } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { Invoice, Branch, Client } from '../types';
 import { COMPANY_NAME, COMPANY_LOGO, APP_CONFIG, INITIAL_BRANCHES, generateSecureQR } from '../constants';
+import emailjs from '@emailjs/browser';
 
 const numberToWords = (num: number): string => {
   if (num === 0) return 'Zero';
@@ -48,6 +48,13 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
   const [searchTerm, setSearchTerm] = useState('');
   const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
 
+  // Email State
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [selectedInvForEmail, setSelectedInvForEmail] = useState<Invoice | null>(null);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+
   const filteredInvoices = invoices.filter(inv => 
     inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
     inv.clientName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -66,6 +73,56 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
              window.open(`https://wa.me/?text=${text}`, '_blank');
         }, 1000);
     }, 500);
+  };
+
+  const handleEmailClick = (inv: Invoice) => {
+    const client = clients.find(c => c.id === inv.clientId);
+    const email = client?.email || '';
+    
+    setSelectedInvForEmail(inv);
+    setEmailTo(email);
+    setEmailMessage(`Please find attached the invoice ${inv.invoiceNumber} for your recent services.\n\nTotal Amount: ₹ ${inv.grandTotal.toLocaleString('en-IN')}\nDue Date: ${inv.date}\n\nYou can login to the client portal to view and pay this invoice.`);
+    setEmailStatus('idle');
+    setEmailModalOpen(true);
+  };
+
+  const sendEmail = async () => {
+    if (!selectedInvForEmail) return;
+    
+    // Configured EmailJS Credentials - UPDATED AS REQUESTED
+    const SERVICE_ID = 'service_gmail'; 
+    const TEMPLATE_ID = 'template_scjyi8o';
+    const PUBLIC_KEY = 'DQ9tmUQaTNMAqpyJa';
+
+    setEmailStatus('sending');
+
+    try {
+        const templateParams = {
+            to_email: emailTo,
+            client_name: selectedInvForEmail.clientName,
+            client_code: selectedInvForEmail.clientId, // Added Client Code as requested
+            invoice_number: selectedInvForEmail.invoiceNumber,
+            company_name: COMPANY_NAME,
+            message: emailMessage,
+            invoice_amount: `₹ ${selectedInvForEmail.grandTotal.toLocaleString('en-IN')}`,
+            date: selectedInvForEmail.date
+        };
+
+        await emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY);
+        
+        setEmailStatus('success');
+        
+        // Auto close after 2.5 seconds of showing success animation
+        setTimeout(() => {
+            setEmailModalOpen(false);
+            setEmailStatus('idle');
+        }, 2500);
+
+    } catch (error) {
+        console.error('Email Error:', error);
+        setEmailStatus('error');
+        alert('Failed to send email. If "service_gmail" is incorrect, please update the SERVICE_ID in InvoiceList.tsx code to match your EmailJS Dashboard.');
+    }
   };
 
   const activeBranches = branches.length > 0 ? branches : INITIAL_BRANCHES;
@@ -226,7 +283,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
                     clientGstin: clientGstin,
                     date: invoice.date,
                     grandTotal: invoice.grandTotal,
-                    items: invoice.items,
                     status: invoice.status
                 })} 
                 size={160} 
@@ -314,6 +370,79 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
       {/* Hidden Print Portal */}
       {printingInvoice && createPortal(<InvoiceDocument invoice={printingInvoice} />, document.getElementById('print-portal')!)}
 
+      {/* Email Composition Modal */}
+      {emailModalOpen && selectedInvForEmail && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in zoom-in-95 duration-200">
+            <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+                {/* Success View */}
+                {emailStatus === 'success' ? (
+                    <div className="flex flex-col items-center justify-center py-16 px-6 text-center animate-in zoom-in-95 duration-300">
+                        <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.2)] animate-[bounce_1s_infinite]">
+                            <Check size={48} className="text-emerald-500" strokeWidth={3} />
+                        </div>
+                        <h3 className="text-2xl font-black text-gray-800 mb-2 tracking-tight">Email Sent Successfully!</h3>
+                        <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-8">
+                            Dispatched to <span className="text-blue-600">{emailTo}</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 font-medium">Closing automatically...</p>
+                    </div>
+                ) : (
+                    <div className="p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 className="text-lg font-black text-gray-800">Email Invoice</h3>
+                                <p className="text-xs text-gray-500 font-bold uppercase tracking-wide">
+                                    {selectedInvForEmail.invoiceNumber}
+                                </p>
+                            </div>
+                            <button onClick={() => setEmailModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                                <X size={20} className="text-gray-400" />
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Recipient (Client Email)</label>
+                                <input 
+                                    type="email" 
+                                    className="w-full mt-1 border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold text-gray-800 outline-none focus:border-[#0854a0] transition-colors"
+                                    value={emailTo}
+                                    onChange={(e) => setEmailTo(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Message Body</label>
+                                <textarea 
+                                    className="w-full mt-1 border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-medium text-gray-700 outline-none focus:border-[#0854a0] min-h-[150px] resize-none transition-colors"
+                                    value={emailMessage}
+                                    onChange={(e) => setEmailMessage(e.target.value)}
+                                />
+                            </div>
+                            
+                            <button 
+                                onClick={sendEmail} 
+                                disabled={emailStatus === 'sending'}
+                                className="w-full py-4 bg-[#0854a0] text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#064280] shadow-xl shadow-blue-100 transition-all active:scale-95 flex items-center justify-center disabled:opacity-70 disabled:pointer-events-none"
+                            >
+                                {emailStatus === 'sending' ? (
+                                    <><Loader2 size={16} className="animate-spin mr-2" /> Sending...</>
+                                ) : (
+                                    <><Send size={16} className="mr-2" /> Send Email</>
+                                )}
+                            </button>
+                            
+                            {emailStatus === 'error' && (
+                                <p className="text-[10px] text-rose-500 font-bold text-center mt-2">
+                                    Error sending email. Please check configuration.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
         <div className="flex items-center space-x-4 flex-1 max-w-xl">
           <div className="relative flex-1">
@@ -374,6 +503,9 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end space-x-2">
+                      <button onClick={() => handleEmailClick(inv)} className="p-2 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors" title="Send Email">
+                        <Mail size={14} />
+                      </button>
                       <button onClick={() => handleWhatsAppShare(inv)} className="p-2 text-green-500 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors" title="Send via WhatsApp (Auto-Print PDF)">
                         <MessageCircle size={14} />
                       </button>

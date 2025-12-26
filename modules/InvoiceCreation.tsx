@@ -295,8 +295,7 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
                     clientName: selectedClient?.name,
                     clientGstin: selectedClient?.gstin,
                     date: invoiceDate,
-                    grandTotal,
-                    items
+                    grandTotal
                 })} 
                 size={160} 
                 level="M" 

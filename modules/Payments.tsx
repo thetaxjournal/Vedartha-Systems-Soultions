@@ -204,7 +204,7 @@ const Payments: React.FC<PaymentsProps> = ({ invoices, payments, branches, onRec
           <div className="flex justify-between items-start">
             <div className="w-1/2 flex items-center space-x-8">
                <div className="p-1 border border-[#000000]">
-                  <QRCode value={qrValue} size={150} level="H" fgColor="#000000" />
+                  <QRCode value={qrValue} size={150} level="M" fgColor="#000000" />
                </div>
                <div className="space-y-1">
                   <p className="text-[8px] font-bold uppercase">Digital signature</p>

@@ -355,7 +355,6 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                     clientGstin: clientGstin,
                     date: invoice.date,
                     grandTotal: invoice.grandTotal,
-                    items: invoice.items,
                     status: invoice.status
                 })} 
                 size={160} 
@@ -622,7 +621,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
           <div className="flex justify-between items-start">
             <div className="w-1/2 flex items-center space-x-8">
                <div className="p-1 border border-[#000000]">
-                  <QRCode value={qrValue} size={150} level="H" fgColor="#000000" />
+                  <QRCode value={qrValue} size={150} level="M" fgColor="#000000" />
                </div>
                <div className="space-y-1">
                   <p className="text-[8px] font-bold uppercase">Digital signature</p>
@@ -665,24 +664,24 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
       {isPrinting && viewingTicket && createPortal(<TicketDocument ticket={viewingTicket} />, document.getElementById('print-portal')!)}
 
       {/* Client Header */}
-      <header className="bg-[#1c2d3d] text-white py-4 px-8 shadow-lg">
+      <header className="bg-[#1c2d3d] text-white py-4 px-4 md:px-8 shadow-lg">
          <div className="max-w-7xl mx-auto flex justify-between items-center">
             <div className="flex items-center space-x-4">
-               <img src={LOGO_DARK_BG} alt="Logo" className="h-14 object-contain" />
-               <div className="h-8 w-[1px] bg-white/20"></div>
+               <img src={LOGO_DARK_BG} alt="Logo" className="h-10 md:h-14 object-contain" />
+               <div className="h-8 w-[1px] bg-white/20 hidden md:block"></div>
                <div>
-                  <h1 className="text-lg font-bold tracking-tight">Client Portal</h1>
-                  <p className="text-[10px] text-gray-400 font-medium">Welcome, {user.displayName}</p>
-                  <p className="text-[10px] text-blue-300 font-mono mt-0.5">Client ID: {user.clientId}</p>
+                  <h1 className="text-sm md:text-lg font-bold tracking-tight">Client Portal</h1>
+                  <p className="text-[10px] text-gray-400 font-medium hidden md:block">Welcome, {user.displayName}</p>
+                  <p className="text-[10px] text-blue-300 font-mono mt-0.5 hidden md:block">ID: {user.clientId}</p>
                </div>
             </div>
             <button onClick={onLogout} className="flex items-center text-xs font-bold bg-white/10 px-4 py-2 rounded-lg hover:bg-white/20 transition-all">
-               <LogOut size={14} className="mr-2" /> Sign Out
+               <LogOut size={14} className="mr-2" /> <span className="hidden md:inline">Sign Out</span>
             </button>
          </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-8 space-y-8">
+      <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
          {/* Stats Cards */}
          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
@@ -692,7 +691,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                   <AlertCircle size={14} className="mr-1" /> Action Required
                </div>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 hidden md:block">
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Last Payment</p>
                <h2 className="text-3xl font-black text-emerald-600 mt-2">
                   {lastPayment ? `₹ ${(lastPayment.amount || 0).toLocaleString('en-IN')}` : '---'}
@@ -715,34 +714,34 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
 
          {/* Main Content Area */}
          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden min-h-[500px]">
-            <div className="flex border-b border-gray-100 overflow-x-auto">
+            <div className="flex border-b border-gray-100 overflow-x-auto custom-scrollbar">
                <button 
                   onClick={() => setActiveTab('invoices')}
-                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all ${activeTab === 'invoices' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all shrink-0 ${activeTab === 'invoices' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
                >
                   Invoices & Due Items
                </button>
                <button 
                   onClick={() => setActiveTab('payments')}
-                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all ${activeTab === 'payments' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all shrink-0 ${activeTab === 'payments' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
                >
                   Payment History & Receipts
                </button>
                <button 
                   onClick={() => setActiveTab('scanner')}
-                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all ${activeTab === 'scanner' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all shrink-0 ${activeTab === 'scanner' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
                >
                   <ScanLine size={16} className="inline mr-2" /> Verify Documents
                </button>
                <button 
                   onClick={() => setActiveTab('tickets')}
-                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all ${activeTab === 'tickets' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
+                  className={`flex-1 min-w-[150px] py-5 text-center text-sm font-bold border-b-2 transition-all shrink-0 ${activeTab === 'tickets' ? 'border-[#0854a0] text-[#0854a0] bg-blue-50/50' : 'border-transparent text-gray-500 hover:bg-gray-50'}`}
                >
                   <Ticket size={16} className="inline mr-2" /> Support Tickets
                </button>
             </div>
 
-            <div className="p-8">
+            <div className="p-4 md:p-8">
                {activeTab === 'invoices' && (
                   <div className="space-y-4">
                      {myInvoices.length === 0 ? (
@@ -750,7 +749,28 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                      ) : (
                         myInvoices.map(inv => (
                            <div key={inv.id} className="border border-gray-100 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between hover:shadow-md transition-all group gap-4">
-                              <div className="flex items-center space-x-6">
+                              {/* Mobile Optimized View */}
+                              <div className="flex md:hidden justify-between items-start w-full">
+                                  <div>
+                                      <h4 className="font-bold text-gray-900 text-lg">{inv.invoiceNumber}</h4>
+                                      <p className="text-xs text-gray-500 mt-1">Due: {new Date(inv.date).toLocaleDateString()}</p>
+                                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase mt-2 inline-block ${inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                          {inv.status}
+                                      </span>
+                                  </div>
+                                  <div className="text-right">
+                                      <p className="text-lg font-black text-gray-900">₹ {(inv.grandTotal || 0).toLocaleString('en-IN')}</p>
+                                      <button 
+                                        onClick={() => setViewingInvoice(inv)}
+                                        className="text-[#0854a0] bg-blue-50 p-2 rounded-lg mt-2 inline-block"
+                                      >
+                                        <Download size={20} />
+                                      </button>
+                                  </div>
+                              </div>
+
+                              {/* Desktop View */}
+                              <div className="hidden md:flex items-center space-x-6">
                                  <div className={`p-4 rounded-xl ${inv.status === 'Paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
                                     <FileText size={24} />
                                  </div>
@@ -764,7 +784,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                     <p className="text-xs text-gray-500 mt-1">Due Date: {new Date(inv.date).toLocaleDateString()}</p>
                                  </div>
                               </div>
-                              <div className="flex items-center justify-between md:justify-end md:space-x-8 w-full md:w-auto">
+                              <div className="hidden md:flex items-center justify-between md:justify-end md:space-x-8 w-full md:w-auto">
                                  <div className="text-right">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase">Amount</p>
                                     <p className="text-lg font-black text-gray-900">₹ {(inv.grandTotal || 0).toLocaleString('en-IN')}</p>
@@ -792,7 +812,23 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                      ) : (
                         myPayments.map(pay => (
                            <div key={pay.id} className="border border-gray-100 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between hover:shadow-md transition-all gap-4">
-                              <div className="flex items-center space-x-6">
+                              {/* Mobile Optimized View */}
+                              <div className="flex md:hidden justify-between items-start w-full">
+                                  <div>
+                                      <h4 className="font-bold text-gray-900 text-sm break-all">{pay.id}</h4>
+                                      <p className="text-xs text-gray-500 mt-1">{pay.method}</p>
+                                      <p className="text-[10px] text-gray-400 mt-1">{new Date(pay.date).toLocaleDateString()}</p>
+                                  </div>
+                                  <div className="text-right pl-4">
+                                      <p className="text-lg font-black text-gray-900">₹ {(pay.amount || 0).toLocaleString('en-IN')}</p>
+                                      <button onClick={() => setViewingReceipt(pay)} className="text-blue-600 bg-blue-50 p-2 rounded-lg mt-2 inline-block">
+                                        <Download size={18} />
+                                      </button>
+                                  </div>
+                              </div>
+
+                              {/* Desktop View */}
+                              <div className="hidden md:flex items-center space-x-6">
                                  <div className="p-4 rounded-xl bg-purple-50 text-purple-600">
                                     <Receipt size={24} />
                                  </div>
@@ -801,7 +837,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                     <p className="text-xs text-gray-500 mt-1">Paid via {pay.method} on {pay.date}</p>
                                  </div>
                               </div>
-                              <div className="flex items-center justify-between md:justify-end md:space-x-8 w-full md:w-auto">
+                              <div className="hidden md:flex items-center justify-between md:justify-end md:space-x-8 w-full md:w-auto">
                                  <div className="text-right">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase">Amount Paid</p>
                                     <p className="text-lg font-black text-gray-900">₹ {(pay.amount || 0).toLocaleString('en-IN')}</p>
@@ -835,9 +871,9 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                     </div>
                                     <button 
                                         onClick={() => setTicketMode('new')}
-                                        className="flex items-center px-8 py-3 bg-[#0854a0] text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#064280] shadow-xl shadow-blue-100 transition-all active:scale-95"
+                                        className="flex items-center px-4 md:px-8 py-3 bg-[#0854a0] text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#064280] shadow-xl shadow-blue-100 transition-all active:scale-95"
                                     >
-                                        <Plus size={16} className="mr-2" /> Raise New Ticket
+                                        <Plus size={16} className="mr-2" /> <span className="hidden md:inline">Raise New Ticket</span> <span className="md:hidden">New</span>
                                     </button>
                                 </div>
                                 {/* ... rest of ticket list ... */}
@@ -868,7 +904,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                                 )}
                                             </div>
                                             
-                                            <div className="flex items-center space-x-4">
+                                            <div className="flex items-center space-x-4 justify-end">
                                                 {ticket.status === 'Closed' && !ticket.rating && (
                                                     <button 
                                                         onClick={() => setFeedbackTicketId(ticket.id)}
