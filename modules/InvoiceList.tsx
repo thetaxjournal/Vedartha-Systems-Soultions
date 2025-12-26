@@ -81,7 +81,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
     
     setSelectedInvForEmail(inv);
     setEmailTo(email);
-    setEmailMessage(`Please find attached the invoice ${inv.invoiceNumber} for your recent services.\n\nTotal Amount: ₹ ${inv.grandTotal.toLocaleString('en-IN')}\nDue Date: ${inv.date}\n\nYou can login to the client portal to view and pay this invoice.`);
+    // Updated Message Body with Website URL and Client ID
+    setEmailMessage(`Dear ${inv.clientName},\n\nPlease find attached the invoice ${inv.invoiceNumber} for your recent services.\n\nClient ID: ${inv.clientId}\nTotal Amount: ₹ ${inv.grandTotal.toLocaleString('en-IN')}\nDue Date: ${inv.date}\n\nYou can login to the client portal to view and pay this invoice here:\nhttps://accountsvedartha.vercel.app`);
     setEmailStatus('idle');
     setEmailModalOpen(true);
   };
