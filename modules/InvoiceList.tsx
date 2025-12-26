@@ -89,8 +89,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
   const sendEmail = async () => {
     if (!selectedInvForEmail) return;
     
-    // Configured EmailJS Credentials - UPDATED AS REQUESTED
-    const SERVICE_ID = 'service_gmail'; 
+    // Configured EmailJS Credentials - UPDATED to service_ibfej4o
+    const SERVICE_ID = 'service_ibfej4o'; 
     const TEMPLATE_ID = 'template_scjyi8o';
     const PUBLIC_KEY = 'DQ9tmUQaTNMAqpyJa';
 
@@ -100,7 +100,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
         const templateParams = {
             to_email: emailTo,
             client_name: selectedInvForEmail.clientName,
-            client_code: selectedInvForEmail.clientId, // Added Client Code as requested
+            client_code: selectedInvForEmail.clientId, // Explicitly added as requested
             invoice_number: selectedInvForEmail.invoiceNumber,
             company_name: COMPANY_NAME,
             message: emailMessage,
@@ -108,20 +108,40 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
             date: selectedInvForEmail.date
         };
 
+        // Send Email
         await emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY);
         
+        // Show Success Animation
         setEmailStatus('success');
         
-        // Auto close after 2.5 seconds of showing success animation
+        // Auto close after 2.5 seconds
         setTimeout(() => {
             setEmailModalOpen(false);
             setEmailStatus('idle');
         }, 2500);
 
-    } catch (error) {
-        console.error('Email Error:', error);
+    } catch (error: any) {
+        console.error('Email Error Details:', error);
         setEmailStatus('error');
-        alert('Failed to send email. If "service_gmail" is incorrect, please update the SERVICE_ID in InvoiceList.tsx code to match your EmailJS Dashboard.');
+        
+        // Parse the error to avoid [object Object]
+        let errorMessage = "Unknown Error";
+        if (error) {
+            if (typeof error === 'string') {
+                errorMessage = error;
+            } else if (typeof error === 'object') {
+                // EmailJS returns { status: 4xx, text: "..." }
+                if (error.text) {
+                    errorMessage = error.text;
+                } else if (error.message) {
+                    errorMessage = error.message;
+                } else {
+                    errorMessage = JSON.stringify(error);
+                }
+            }
+        }
+        
+        alert(`Email Failed: ${errorMessage}\n\nPlease check your internet connection or EmailJS quota.`);
     }
   };
 
