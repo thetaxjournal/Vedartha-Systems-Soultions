@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Search, Plus, Edit2, Shield, Trash2, MapPin, CreditCard, PieChart, X, Save, CheckCircle2, AlertCircle, Key, Lock, Copy } from 'lucide-react';
 import { Client, Branch, Address } from '../types';
+import { INDIAN_STATES } from '../constants';
 
 interface ClientsProps {
   clients: Client[];
@@ -31,8 +32,8 @@ const Clients: React.FC<ClientsProps> = ({ clients, setClients, branches }) => {
       gstin: '',
       status: 'Active',
       branchIds: branches.map(b => b.id),
-      billingAddress: { line1: '', city: '', state: '', pincode: '', country: 'INDIA' },
-      shippingAddress: { line1: '', city: '', state: '', pincode: '', country: 'INDIA' },
+      billingAddress: { line1: '', city: '', state: 'Karnataka', pincode: '', country: 'INDIA' },
+      shippingAddress: { line1: '', city: '', state: 'Karnataka', pincode: '', country: 'INDIA' },
       portalAccess: false,
       portalPassword: ''
     });
@@ -233,7 +234,19 @@ const Clients: React.FC<ClientsProps> = ({ clients, setClients, branches }) => {
                     <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">Street address / Floor</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.billingAddress?.line1} onChange={(e) => updateAddr('billingAddress', 'line1', e.target.value)} /></div>
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">City / District</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.billingAddress?.city} onChange={(e) => updateAddr('billingAddress', 'city', e.target.value)} /></div>
-                      <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">State / Region</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.billingAddress?.state} onChange={(e) => updateAddr('billingAddress', 'state', e.target.value)} /></div>
+                      <div className="space-y-2">
+                          <label className="text-[11px] font-bold text-gray-500 ml-1">State / Region</label>
+                          <select 
+                            className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" 
+                            value={editingClient.billingAddress?.state} 
+                            onChange={(e) => updateAddr('billingAddress', 'state', e.target.value)}
+                          >
+                            <option value="">Select State</option>
+                            {INDIAN_STATES.map(state => (
+                                <option key={state} value={state}>{state}</option>
+                            ))}
+                          </select>
+                      </div>
                     </div>
                     <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">Zip / Postal code</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.billingAddress?.pincode} onChange={(e) => updateAddr('billingAddress', 'pincode', e.target.value)} /></div>
                   </div>
@@ -250,7 +263,19 @@ const Clients: React.FC<ClientsProps> = ({ clients, setClients, branches }) => {
                     <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">Logistics entry point</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.shippingAddress?.line1} onChange={(e) => updateAddr('shippingAddress', 'line1', e.target.value)} /></div>
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">Destination city</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.shippingAddress?.city} onChange={(e) => updateAddr('shippingAddress', 'city', e.target.value)} /></div>
-                      <div className="space-y-2"><label className="text-[11px] font-bold text-gray-500 ml-1">Destination state</label><input className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" value={editingClient.shippingAddress?.state} onChange={(e) => updateAddr('shippingAddress', 'state', e.target.value)} /></div>
+                      <div className="space-y-2">
+                          <label className="text-[11px] font-bold text-gray-500 ml-1">Destination state</label>
+                          <select 
+                            className="w-full bg-white rounded-2xl border-2 border-gray-100 px-6 h-14 font-medium text-gray-800 focus:border-[#0854a0] outline-none" 
+                            value={editingClient.shippingAddress?.state} 
+                            onChange={(e) => updateAddr('shippingAddress', 'state', e.target.value)}
+                          >
+                            <option value="">Select State</option>
+                            {INDIAN_STATES.map(state => (
+                                <option key={state} value={state}>{state}</option>
+                            ))}
+                          </select>
+                      </div>
                     </div>
                   </div>
                 </div>

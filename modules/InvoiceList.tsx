@@ -77,6 +77,16 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
     // If client data is missing (deleted), mock basic structure from invoice snapshot
     const clientName = selectedClient?.name || invoice.clientName;
     const clientGstin = selectedClient?.gstin || invoice.clientGstin;
+
+    // GST Logic
+    const placeOfSupply = invoice.placeOfSupply || selectedClient?.billingAddress.state || activeBranch.address.state;
+    const isInterState = activeBranch.address.state.trim().toLowerCase() !== placeOfSupply.trim().toLowerCase();
+
+    // Branch specific bank details
+    const bankName = activeBranch?.bankDetails?.bankName || APP_CONFIG.bankDetails?.bankName || 'N/A';
+    const bankAddress = activeBranch?.bankDetails?.branchName || APP_CONFIG.bankDetails?.branchName || 'N/A';
+    const bankAccount = activeBranch?.bankDetails?.accountNumber || APP_CONFIG.bankDetails?.accountNumber || 'N/A';
+    const bankIfsc = activeBranch?.bankDetails?.ifscCode || APP_CONFIG.bankDetails?.ifscCode || 'N/A';
     
     return (
     <div className="flex flex-col text-[#000000]">
@@ -129,7 +139,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
                  {selectedClient?.billingAddress.city} {selectedClient?.billingAddress.pincode}, {selectedClient?.billingAddress.state}, India.
               </div>
             </div>
-            <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Place of supply</span><span className="w-4 shrink-0 text-center">:</span><span>{activeBranch?.address.state} ({activeBranch?.gstin.slice(0,2)})</span></div>
+            <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Place of supply</span><span className="w-4 shrink-0 text-center">:</span><span>{placeOfSupply}</span></div>
             <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Gstin/Unique id</span><span className="w-4 shrink-0 text-center">:</span><span className="font-bold tracking-tight">{clientGstin}</span></div>
           </div>
         </div>
@@ -161,8 +171,16 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
         <div className="flex justify-end mt-4 text-[11px] shrink-0 text-[#000000]">
           <div className="w-72 space-y-1">
             <div className="flex justify-between items-center"><span className="font-bold">Amount</span><span className="w-36 flex justify-between"><span>:</span><span>{invoice.subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
-            <div className="flex justify-between items-center"><span className="font-bold">Cgst @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
-            <div className="flex justify-between items-center"><span className="font-bold">Sgst @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            
+            {isInterState ? (
+                <div className="flex justify-between items-center"><span className="font-bold">IGST @ 18.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{invoice.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            ) : (
+                <>
+                    <div className="flex justify-between items-center"><span className="font-bold">CGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                    <div className="flex justify-between items-center"><span className="font-bold">SGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                </>
+            )}
+
             <div className="h-[1px] bg-[#000000] my-1"></div>
             <div className="flex justify-between font-bold text-[14px]">
               <span className="font-bold">Gross amount</span>
@@ -211,7 +229,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
                     items: invoice.items,
                     status: invoice.status
                 })} 
-                size={100} 
+                size={160} 
                 level="M" 
                 fgColor="#000000" 
               />
@@ -268,9 +286,9 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
             a) This bill is payable by electronic transfer/ dd/ cheque in favor of <span className="font-bold">{activeBranch?.name}</span>. Please make payment within 15 days of receipt of this invoice.
           </p>
           <div className="space-y-1">
-            <p>b) Bank details : <span className="font-bold">{APP_CONFIG.bankDetails.bankName}, {APP_CONFIG.bankDetails.address}</span></p>
+            <p>b) Bank details : <span className="font-bold">{bankName}, {bankAddress}</span></p>
             <p className="font-bold border-l-2 border-[#000000] pl-4 py-2 mt-2 bg-gray-50/50">
-              Account number: {APP_CONFIG.bankDetails.accountNumber}, Rtgs ifsc code: {APP_CONFIG.bankDetails.ifscCode}
+              Account number: {bankAccount}, Rtgs ifsc code: {bankIfsc}
             </p>
           </div>
           <p>

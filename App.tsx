@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Module, Branch, Client, Invoice, Payment, UserProfile } from './types';
+import { Module, Branch, Client, Invoice, Payment, UserProfile, AppNotification, UserRole } from './types';
 import { INITIAL_BRANCHES, INITIAL_CLIENTS } from './constants';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -13,6 +13,7 @@ import Branches from './modules/Branches';
 import Accounts from './modules/Accounts';
 import Settings from './modules/Settings';
 import Scanner from './modules/Scanner';
+import Notifications from './modules/Notifications';
 import Login from './components/Login';
 import ClientPortal from './modules/ClientPortal';
 
@@ -26,13 +27,17 @@ import {
   updateDoc, 
   setDoc,
   query,
-  where
+  where,
+  orderBy,
+  getDoc
 } from 'firebase/firestore';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // Store extended user data (role, branches)
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState<Module>('Dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // State managed by Firestore listeners
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -40,6 +45,7 @@ const App: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   
   const [showCreation, setShowCreation] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -47,12 +53,32 @@ const App: React.FC = () => {
   // Auth Listener
   useEffect(() => {
     // Standard Firebase Auth
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       // Only set user if it's not a synthetic client login (which is handled manually in Login.tsx)
       if (currentUser) {
         setUser(currentUser);
+        // Fetch User Profile Role
+        try {
+           // In a real app, you would fetch this from 'users' collection using currentUser.uid
+           // For this demo, if email is admin@vedartha.com, grant ADMIN, else BRANCH_MANAGER
+           // Assuming we might have stored it in Firestore 'users' collection:
+           const userQuery = query(collection(db, 'users'), where('email', '==', currentUser.email));
+           // For simplicity in this demo structure without full user management implementation:
+           const isAdmin = currentUser.email?.includes('admin');
+           const mockProfile: UserProfile = {
+              uid: currentUser.uid,
+              email: currentUser.email || '',
+              displayName: currentUser.displayName || 'User',
+              role: isAdmin ? UserRole.ADMIN : UserRole.BRANCH_MANAGER,
+              allowedBranchIds: isAdmin ? [] : ['B001'] // Mock: Admin sees all, Manager sees B001
+           };
+           setUserProfile(mockProfile);
+        } catch (e) {
+           console.error("Error fetching user profile", e);
+        }
       } else if (!user?.isClient) {
         setUser(null);
+        setUserProfile(null);
       }
       setLoading(false);
     });
@@ -92,22 +118,41 @@ const App: React.FC = () => {
       const sorted = snapshot.docs.map(doc => doc.data() as Payment).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setPayments(sorted);
     });
+    
+    // Notifications Listener (New)
+    const unsubNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+        const sorted = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as AppNotification)).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setNotifications(sorted);
+    });
 
     return () => {
       unsubBranches();
       unsubClients();
       unsubInvoices();
       unsubPayments();
+      unsubNotifications();
     };
   }, [user]);
 
   const handleLogin = (userObj: any) => {
     setUser(userObj);
+    // For Synthetic Client Login
+    if (userObj.isClient) {
+        setUserProfile({
+            uid: userObj.uid,
+            email: userObj.email,
+            displayName: userObj.displayName,
+            role: UserRole.CLIENT,
+            allowedBranchIds: [],
+            clientId: userObj.clientId
+        });
+    }
   };
 
   const handleLogout = () => {
     signOut(auth);
     setUser(null);
+    setUserProfile(null);
   };
 
   // Firestore Updates
@@ -156,26 +201,40 @@ const App: React.FC = () => {
   const handleAddUser = async (userProfile: Omit<UserProfile, 'uid'>) => {
     await addDoc(collection(db, 'users'), userProfile);
   };
+  
+  // Send Notification to Admin/Branch (Raise Ticket)
+  const handleClientMessage = async (subject: string, message: string, generatedTicketNumber: string) => {
+      if(!user?.isClient) return;
+      
+      // Find Client Branch ID to route notification
+      const currentClient = clients.find(c => c.id === user.clientId);
+      const targetBranchId = currentClient?.branchIds[0] || 'B001'; // Default or first branch
 
-  // NEW: Handle online payment from Client Portal
-  const handleClientOnlinePayment = async (invoiceId: string, amount: number): Promise<Payment | undefined> => {
-    const inv = invoices.find(i => i.id === invoiceId);
-    if (!inv) return undefined;
+      const newNotification: Omit<AppNotification, 'id'> = {
+          date: new Date().toISOString(),
+          clientId: user.clientId,
+          clientName: user.displayName,
+          branchId: targetBranchId,
+          ticketNumber: generatedTicketNumber,
+          subject,
+          message,
+          status: 'Open'
+      };
+      
+      await addDoc(collection(db, 'notifications'), newNotification);
+  };
 
-    const newPayment: Payment = {
-      id: `RCPT-${Date.now().toString().slice(-8)}`,
-      invoiceId: inv.id,
-      invoiceNumber: inv.invoiceNumber,
-      clientName: inv.clientName,
-      amount: amount,
-      date: new Date().toISOString().split('T')[0],
-      method: 'Online Gateway',
-      reference: `GATEWAY-${Date.now()}`
-    };
+  // Close Ticket (Admin)
+  const handleCloseTicket = async (ticketId: string) => {
+      await updateDoc(doc(db, 'notifications', ticketId), { status: 'Closed' });
+  };
 
-    // Trigger standard payment recording logic which updates Invoice Status and adds Receipt
-    await handleRecordPayment(newPayment);
-    return newPayment;
+  // Submit Feedback (Client)
+  const handleTicketFeedback = async (ticketId: string, rating: number, feedback: string) => {
+      await updateDoc(doc(db, 'notifications', ticketId), { 
+          rating,
+          feedback 
+      });
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600">Loading Cloud Resources...</div>;
@@ -194,12 +253,28 @@ const App: React.FC = () => {
          invoices={invoices}
          payments={payments}
          branches={branches}
-         onPayInvoice={handleClientOnlinePayment}
+         notifications={notifications.filter(n => n.clientId === user.clientId)} // Pass client tickets
          onLogout={handleLogout}
+         onSendMessage={handleClientMessage}
+         onFeedback={handleTicketFeedback}
       />
     );
   }
   // -----------------------------
+
+  // --- FILTER DATA FOR BRANCH MANAGERS ---
+  const isBranchManager = userProfile?.role === UserRole.BRANCH_MANAGER;
+  // If Branch Manager, limit to their allowed branches (mock logic uses allowedBranchIds)
+  // For admin, show all.
+  const allowedBranches = isBranchManager && userProfile?.allowedBranchIds 
+    ? branches.filter(b => userProfile.allowedBranchIds.includes(b.id)) 
+    : branches;
+
+  // Filter Notifications for Branch Manager
+  const filteredNotifications = isBranchManager 
+     ? notifications.filter(n => userProfile?.allowedBranchIds.includes(n.branchId))
+     : notifications;
+  // ---------------------------------------
 
   const renderModule = () => {
     switch (activeModule) {
@@ -208,16 +283,23 @@ const App: React.FC = () => {
           <Dashboard 
             invoices={invoices} 
             clients={clients} 
-            branches={branches} 
+            branches={allowedBranches} 
             payments={payments}
             onRecordPayment={handleRecordPayment}
           />
+        );
+      case 'Notifications':
+        return (
+            <Notifications 
+                notifications={filteredNotifications} 
+                onCloseTicket={handleCloseTicket}
+            />
         );
       case 'Invoices':
         if (showCreation) {
           return (
             <InvoiceCreation 
-              branches={branches} 
+              branches={allowedBranches} 
               activeBranchId={activeBranchId} 
               clients={clients} 
               initialInvoice={editingInvoice || undefined}
@@ -233,7 +315,7 @@ const App: React.FC = () => {
           <InvoiceList 
             invoices={invoices} 
             clients={clients}
-            branches={branches}
+            branches={allowedBranches}
             onNewInvoice={() => {
               setEditingInvoice(null);
               setShowCreation(true);
@@ -247,19 +329,22 @@ const App: React.FC = () => {
           <Payments 
             invoices={invoices} 
             payments={payments} 
-            branches={branches}
+            branches={allowedBranches}
             onRecordPayment={handleRecordPayment} 
           />
         );
       case 'Clients':
-        return <Clients clients={clients} setClients={handleUpdateClients} branches={branches} />;
+        return <Clients clients={clients} setClients={handleUpdateClients} branches={allowedBranches} />;
       case 'Branches':
+        // Only Admin can access, Sidebar should hide it but double check
+        if (isBranchManager) return <div>Access Denied</div>;
         return <Branches branches={branches} setBranches={handleUpdateBranches} />;
       case 'Accounts':
         return <Accounts invoices={invoices} />;
       case 'Scanner':
         return <Scanner invoices={invoices} payments={payments} />;
       case 'Settings':
+        if (isBranchManager) return <div>Access Denied</div>;
         return (
           <Settings 
             state={{ invoices, clients, branches, payments }} 
@@ -271,7 +356,7 @@ const App: React.FC = () => {
           <Dashboard 
             invoices={invoices} 
             clients={clients} 
-            branches={branches} 
+            branches={allowedBranches} 
             payments={payments}
             onRecordPayment={handleRecordPayment}
           />
@@ -287,16 +372,21 @@ const App: React.FC = () => {
           setActiveModule(m);
           setShowCreation(false);
           setEditingInvoice(null);
-        }} 
+          setIsSidebarOpen(false); // Close sidebar on mobile when module changes
+        }}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        userRole={userProfile?.role}
       />
       
       <div className="flex-1 flex flex-col min-w-0">
         <Header 
-          branches={branches}
+          branches={allowedBranches}
           activeBranchId={activeBranchId}
           onBranchChange={setActiveBranchId}
           title={activeModule === 'Invoices' ? (showCreation ? (editingInvoice ? 'Edit Document' : 'Create Invoice') : 'Invoice Dashboard') : activeModule}
           onLogout={handleLogout}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         
         <main className={`flex-1 overflow-y-auto ${(activeModule === 'Invoices' && showCreation) ? 'p-0' : 'p-8'}`}>

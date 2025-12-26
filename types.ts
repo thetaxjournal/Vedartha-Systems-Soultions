@@ -24,6 +24,14 @@ export interface Address {
   country: string;
 }
 
+export interface BankDetails {
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  branchName: string;
+  swiftCode?: string;
+}
+
 export interface Branch {
   id: string;
   name: string;
@@ -36,6 +44,9 @@ export interface Branch {
   defaultTaxRate: number;
   invoicePrefix: string;
   nextInvoiceNumber: number;
+  bankDetails: BankDetails;
+  portalUsername?: string; // New: Branch Portal Login
+  portalPassword?: string; // New: Branch Portal Password
 }
 
 export interface Client {
@@ -73,6 +84,7 @@ export interface Invoice {
   clientName: string;
   clientGstin: string;
   kindAttn: string;
+  placeOfSupply: string; // New: To determine IGST vs CGST/SGST persistence
   items: InvoiceItem[];
   subTotal: number;
   taxAmount: number;
@@ -101,4 +113,18 @@ export interface Transaction {
   branchId: string;
 }
 
-export type Module = 'Dashboard' | 'Invoices' | 'Payments' | 'Clients' | 'Branches' | 'Accounts' | 'Settings' | 'Scanner';
+export interface AppNotification {
+  id: string;
+  ticketNumber?: string; // Added for Ticket System
+  date: string;
+  branchId: string; // Used to route notification to specific branch manager
+  clientId: string;
+  clientName: string;
+  subject: string;
+  message: string;
+  status: 'Open' | 'Closed'; // Simplified Workflow
+  rating?: number; // 1-5 Stars
+  feedback?: string; // Client feedback text
+}
+
+export type Module = 'Dashboard' | 'Invoices' | 'Payments' | 'Clients' | 'Branches' | 'Accounts' | 'Settings' | 'Scanner' | 'Notifications';

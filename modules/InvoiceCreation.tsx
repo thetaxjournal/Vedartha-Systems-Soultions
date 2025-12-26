@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { Branch, Client, InvoiceItem, Invoice } from '../types';
-import { COMPANY_LOGO, APP_CONFIG, COMPANY_NAME, generateSecureQR } from '../constants';
+import { COMPANY_LOGO, APP_CONFIG, COMPANY_NAME, generateSecureQR, INDIAN_STATES } from '../constants';
 
 const numberToWords = (num: number): string => {
   if (num === 0) return 'Zero';
@@ -65,6 +65,8 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
   const [invoiceNumber, setInvoiceNumber] = useState(initialInvoice?.invoiceNumber || '');
   const [invoiceDate, setInvoiceDate] = useState(initialInvoice?.date || new Date().toISOString().split('T')[0]);
   const [kindAttn, setKindAttn] = useState(initialInvoice?.kindAttn || '');
+  const [placeOfSupply, setPlaceOfSupply] = useState(initialInvoice?.placeOfSupply || '');
+  
   const [showPreview, setShowPreview] = useState(true);
   const [isPrinting, setIsPrinting] = useState(false);
   
@@ -88,6 +90,13 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
     }
   }, [activeBranchId, branches, initialInvoice, invoiceNumber]);
 
+  // Auto-select Place of Supply when client is selected
+  useEffect(() => {
+    if (selectedClient && !initialInvoice) {
+        setPlaceOfSupply(selectedClient.billingAddress.state);
+    }
+  }, [selectedClient, initialInvoice]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (scrollerRef.current && !scrollerRef.current.contains(event.target as Node)) {
@@ -101,6 +110,10 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
   const subTotal = items.reduce((acc, item) => acc + (item.quantity * item.rate), 0);
   const taxAmount = items.reduce((acc, item) => acc + (item.quantity * item.rate * (item.taxPercent / 100)), 0);
   const grandTotal = subTotal + taxAmount;
+
+  // Logic for Inter-state (IGST) vs Intra-state (CGST+SGST)
+  const isInterState = activeBranch && placeOfSupply && 
+    (activeBranch.address.state.trim().toLowerCase() !== placeOfSupply.trim().toLowerCase());
 
   const handleDownloadPDF = async () => {
     const originalTitle = document.title;
@@ -119,18 +132,14 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
       return;
     }
 
-    // 1. Prepare PDF Name
     const originalTitle = document.title;
     document.title = `${invoiceNumber}_Tax_Invoice`;
     
-    // 2. Render Print View
     setIsPrinting(true);
 
-    // 3. Trigger Print (User saves as PDF)
     setTimeout(() => {
       window.print();
       
-      // 4. Cleanup and Open WhatsApp
       setIsPrinting(false);
       document.title = originalTitle;
 
@@ -138,9 +147,14 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
       
       setTimeout(() => {
         window.open(`https://wa.me/?text=${text}`, '_blank');
-      }, 1000); // Wait for print dialog to potentially close or settle
+      }, 1000); 
     }, 500);
   };
+
+  const bankName = activeBranch?.bankDetails?.bankName || APP_CONFIG.bankDetails?.bankName || 'N/A';
+  const bankAddress = activeBranch?.bankDetails?.branchName || APP_CONFIG.bankDetails?.branchName || 'N/A';
+  const bankAccount = activeBranch?.bankDetails?.accountNumber || APP_CONFIG.bankDetails?.accountNumber || 'N/A';
+  const bankIfsc = activeBranch?.bankDetails?.ifscCode || APP_CONFIG.bankDetails?.ifscCode || 'N/A';
 
   const InvoiceDocument = () => (
     <div className="flex flex-col text-[#000000]">
@@ -193,7 +207,8 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
                 {selectedClient?.billingAddress.city} - {selectedClient?.billingAddress.pincode}, {selectedClient?.billingAddress.state}, India.
               </div>
             </div>
-            <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Place of supply</span><span className="w-4 shrink-0 text-center">:</span><span>{activeBranch?.address.state} ({activeBranch?.gstin.slice(0,2)})</span></div>
+            {/* Auto Selected Place of Supply */}
+            <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Place of supply</span><span className="w-4 shrink-0 text-center">:</span><span>{placeOfSupply}</span></div>
             <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Gstin/Unique id</span><span className="w-4 shrink-0 text-center">:</span><span className="font-bold tracking-tight">{selectedClient?.gstin}</span></div>
           </div>
         </div>
@@ -225,8 +240,17 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
         <div className="flex justify-end mt-4 text-[11px] shrink-0 text-[#000000]">
           <div className="w-72 space-y-1">
             <div className="flex justify-between items-center"><span className="font-bold">Amount</span><span className="w-36 flex justify-between"><span>:</span><span>{subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
-            <div className="flex justify-between items-center"><span className="font-bold">Cgst @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
-            <div className="flex justify-between items-center"><span className="font-bold">Sgst @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            
+            {/* Dynamic GST Logic */}
+            {isInterState ? (
+                <div className="flex justify-between items-center"><span className="font-bold">IGST @ 18.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            ) : (
+                <>
+                    <div className="flex justify-between items-center"><span className="font-bold">CGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                    <div className="flex justify-between items-center"><span className="font-bold">SGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                </>
+            )}
+
             <div className="h-[1px] bg-[#000000] my-1"></div>
             <div className="flex justify-between font-bold text-[14px]">
               <span className="font-bold">Gross amount</span>
@@ -266,7 +290,7 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
               <QRCode 
                 value={generateSecureQR({
                     type: 'INV',
-                    id: initialInvoice?.id || `INV-${Date.now()}`, // fallback id
+                    id: initialInvoice?.id || `INV-${Date.now()}`, 
                     invoiceNumber,
                     clientName: selectedClient?.name,
                     clientGstin: selectedClient?.gstin,
@@ -274,7 +298,7 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
                     grandTotal,
                     items
                 })} 
-                size={100} 
+                size={160} 
                 level="M" 
                 fgColor="#000000" 
               />
@@ -331,9 +355,9 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
             a) This bill is payable by electronic transfer/ dd/ cheque in favor of <span className="font-bold">{activeBranch?.name}</span>. Please make payment within 15 days of receipt of this invoice.
           </p>
           <div className="space-y-1">
-            <p>b) Bank details : <span className="font-bold">{APP_CONFIG.bankDetails.bankName}, {APP_CONFIG.bankDetails.address}</span></p>
+            <p>b) Bank details : <span className="font-bold">{bankName}, {bankAddress}</span></p>
             <p className="font-bold border-l-2 border-[#000000] pl-4 py-2 mt-2 bg-gray-50/50">
-              Account number: {APP_CONFIG.bankDetails.accountNumber}, Rtgs ifsc code: {APP_CONFIG.bankDetails.ifscCode}
+              Account number: {bankAccount}, Rtgs ifsc code: {bankIfsc}
             </p>
           </div>
           <p>
@@ -354,131 +378,194 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
   );
 
   return (
-    <div className="flex h-full bg-[#f3f4f7] overflow-hidden no-print">
-      {isPrinting && createPortal(<InvoiceDocument />, document.getElementById('print-portal')!)}
+    <div className="flex flex-col md:flex-row h-full bg-[#f8f9fa] animate-in fade-in duration-300">
+        {/* Print Portal */}
+        {isPrinting && createPortal(<InvoiceDocument />, document.getElementById('print-portal')!)}
 
-      <div className={`flex-1 overflow-y-auto p-10 bg-[#eff2f6] border-r border-gray-200 editor-panel ${showPreview ? 'hidden xl:block' : 'block'} custom-scrollbar`}>
-        <div className="max-w-5xl mx-auto space-y-10 pb-20">
-          <div className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm sticky top-0 z-50 border border-gray-100">
-            <div className="flex flex-col">
-              <h2 className="text-base font-bold text-gray-800 tracking-tight">Create Invoice</h2>
-              <p className="text-[10px] font-bold text-blue-500 mt-1">Real-time Financial Orchestration</p>
-            </div>
-            <div className="flex space-x-3">
-              {!showPreview && (
-                <button onClick={() => setShowPreview(true)} className="flex items-center px-6 py-3 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all">
-                  <Eye size={18} className="mr-2" /> Show Preview
-                </button>
-              )}
-              <button onClick={() => {
-                if (!selectedClient) return alert("Please select a client first.");
-                onPost({
-                  id: initialInvoice?.id || `INV-${Date.now()}`,
-                  invoiceNumber,
-                  date: invoiceDate,
-                  branchId: activeBranch?.id || '',
-                  branchName: activeBranch?.name || '',
-                  clientId: selectedClient.id,
-                  clientName: selectedClient.name,
-                  clientGstin: selectedClient.gstin,
-                  kindAttn,
-                  items,
-                  subTotal,
-                  taxAmount,
-                  grandTotal,
-                  status: 'Posted'
-                });
-              }} className="bg-[#0854a0] text-white px-8 py-3 rounded-xl text-[11px] font-bold shadow-2xl shadow-blue-100 hover:bg-[#064280] transition-all transform active:scale-95">
-                <Zap size={16} className="inline mr-2" /> Post Transaction
-              </button>
-              <button onClick={onCancel} className="p-3 text-gray-400 hover:bg-gray-100 rounded-full transition-all">
-                <X size={24} />
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white p-10 rounded-3xl shadow-sm space-y-10 border border-gray-100">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8" ref={scrollerRef}>
-              <div className="space-y-2 relative">
-                <label className="text-[11px] font-bold text-gray-500 ml-1">Client master lookup</label>
-                <div className="flex items-center border-2 border-gray-100 rounded-2xl px-5 py-4 focus-within:border-[#0854a0] transition-all shadow-sm h-14">
-                  <Search size={18} className="text-gray-400 mr-3" />
-                  <input className="text-sm font-bold outline-none w-full bg-transparent" placeholder="Search client name..." value={clientSearch} onFocus={() => setShowClientList(true)} onChange={(e) => setClientSearch(e.target.value)} />
+        {/* Form Side */}
+        <div className={`w-full md:w-[45%] flex flex-col h-full border-r border-gray-200 bg-white shadow-xl z-10 ${showPreview ? 'hidden md:flex' : 'flex'}`}>
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white">
+                <div>
+                    <h2 className="text-xl font-black text-[#1c2d3d] tracking-tight">{initialInvoice ? 'Edit Invoice' : 'New Invoice'}</h2>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{activeBranch?.name}</p>
                 </div>
-                {showClientList && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 shadow-xl z-[60] rounded-2xl mt-2 max-h-72 overflow-y-auto">
-                    {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(c => (
-                      <button key={c.id} onClick={() => {setSelectedClient(c); setClientSearch(c.name); setShowClientList(false);}} className="w-full text-left p-5 hover:bg-blue-50 text-[12px] font-bold border-b border-gray-50 flex items-center justify-between transition-colors">
-                        <span>{c.name}</span>
-                        <span className="text-[10px] text-blue-500 font-mono">{c.gstin}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-gray-500 ml-1">Invoice posting date</label>
-                <div className="flex items-center border-2 border-gray-100 rounded-2xl px-5 py-4 focus-within:border-[#0854a0] transition-all shadow-sm h-14">
-                  <Calendar size={18} className="text-gray-400 mr-3 shrink-0" />
-                  <input 
-                    type="date" 
-                    className="text-sm font-bold outline-none w-full bg-transparent" 
-                    value={invoiceDate} 
-                    onChange={(e) => setInvoiceDate(e.target.value)} 
-                  />
-                </div>
-              </div>
+                <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full transition-all"><X size={20} className="text-gray-400" /></button>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-gray-500 ml-1">Document subject / Attention</label>
-                <input className="w-full border-2 border-gray-100 rounded-2xl px-6 h-14 text-sm font-bold focus:border-[#0854a0] outline-none transition-all shadow-sm" value={kindAttn} onChange={(e) => setKindAttn(e.target.value)} placeholder="e.g., Accounts payable manager" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-6 border-b flex justify-between items-center bg-gray-50/80">
-              <span className="text-[12px] font-bold text-gray-700">Service line items</span>
-              <button onClick={() => setItems([...items, { id: Math.random().toString(), description: '', hsnCode: '998311 - Management consulting services', quantity: 1, rate: 0, discountPercent: 0, taxPercent: 18 }])} className="p-3 bg-white text-[#0854a0] rounded-xl border border-gray-200 shadow-sm hover:scale-110 transition-transform"><Plus size={24} /></button>
-            </div>
-            <div className="divide-y-2 divide-gray-50">
-              {items.map((item, idx) => (
-                <div key={item.id} className="p-10 space-y-6 relative group hover:bg-gray-50/30 transition-colors">
-                  <textarea className="w-full border-2 border-gray-100 rounded-2xl p-5 text-[14px] font-bold text-gray-700 resize-none min-h-[140px] focus:border-[#0854a0] outline-none transition-all shadow-sm" placeholder="Description of service..." value={item.description} onChange={(e) => setItems(items.map(it => it.id === item.id ? { ...it, description: e.target.value } : it))} />
-                  <div className="grid grid-cols-2 gap-8">
-                    <input className="w-full border-b-2 border-gray-100 p-3 text-[12px] font-bold text-gray-800 outline-none" placeholder="Hsn code" value={item.hsnCode} onChange={(e) => setItems(items.map(it => it.id === item.id ? { ...it, hsnCode: e.target.value } : it))} />
-                    <input type="number" className="w-full border-b-2 border-gray-100 p-3 text-[16px] font-bold text-[#0854a0] outline-none" placeholder="Rate" value={item.rate} onChange={(e) => setItems(items.map(it => it.id === item.id ? { ...it, rate: Number(e.target.value) } : it))} />
-                  </div>
-                  <button onClick={() => setItems(items.filter(it => it.id !== item.id))} className="absolute top-6 right-6 p-2 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={20} /></button>
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                {/* Client Selection */}
+                <div className="space-y-2 relative" ref={scrollerRef}>
+                    <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Bill To Client</label>
+                    <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input 
+                            type="text" 
+                            className="w-full h-14 bg-gray-50 border-2 border-transparent focus:border-[#0854a0] focus:bg-white rounded-2xl pl-12 pr-4 text-sm font-bold transition-all outline-none"
+                            placeholder="Search Client Name..."
+                            value={clientSearch}
+                            onChange={(e) => { setClientSearch(e.target.value); setShowClientList(true); }}
+                            onFocus={() => setShowClientList(true)}
+                        />
+                    </div>
+                    {showClientList && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 max-h-60 overflow-y-auto z-50">
+                            {clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(client => (
+                                <div 
+                                    key={client.id} 
+                                    className="p-4 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0"
+                                    onClick={() => {
+                                        setSelectedClient(client);
+                                        setClientSearch(client.name);
+                                        setPlaceOfSupply(client.billingAddress.state);
+                                        setShowClientList(false);
+                                    }}
+                                >
+                                    <p className="font-bold text-gray-800 text-sm">{client.name}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold">{client.gstin}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
-              ))}
+
+                {/* Metadata Grid */}
+                <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Invoice #</label>
+                        <input type="text" className="w-full h-12 bg-gray-50 rounded-xl px-4 text-xs font-bold border-2 border-transparent focus:border-blue-500 outline-none" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Date</label>
+                        <input type="date" className="w-full h-12 bg-gray-50 rounded-xl px-4 text-xs font-bold border-2 border-transparent focus:border-blue-500 outline-none" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Kind Attn.</label>
+                        <input type="text" className="w-full h-12 bg-gray-50 rounded-xl px-4 text-xs font-bold border-2 border-transparent focus:border-blue-500 outline-none" value={kindAttn} onChange={(e) => setKindAttn(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Place of Supply</label>
+                         <select 
+                            className="w-full h-12 bg-gray-50 rounded-xl px-4 text-xs font-bold border-2 border-transparent focus:border-blue-500 outline-none"
+                            value={placeOfSupply} 
+                            onChange={(e) => setPlaceOfSupply(e.target.value)}
+                        >
+                            <option value="">Select State</option>
+                            {INDIAN_STATES.map(state => (
+                                <option key={state} value={state}>{state}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Items */}
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                        <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Billable Items</label>
+                        <button 
+                            onClick={() => setItems([...items, { id: Date.now().toString(), description: '', hsnCode: '998311', quantity: 1, rate: 0, discountPercent: 0, taxPercent: 18 }])}
+                            className="text-[10px] font-bold text-[#0854a0] hover:bg-blue-50 px-3 py-1 rounded-lg transition-colors flex items-center"
+                        >
+                            <Plus size={12} className="mr-1" /> Add Line Item
+                        </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        {items.map((item, idx) => (
+                            <div key={item.id} className="bg-gray-50 p-4 rounded-2xl border border-gray-100 relative group hover:shadow-md transition-all">
+                                <button 
+                                    onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                                    className="absolute top-2 right-2 text-gray-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                                <div className="grid grid-cols-12 gap-3">
+                                    <div className="col-span-12 space-y-1">
+                                        <label className="text-[9px] font-bold text-gray-400 uppercase">Description</label>
+                                        <textarea rows={2} className="w-full bg-white rounded-lg p-2 text-xs font-bold border border-gray-200 outline-none focus:border-blue-500" value={item.description} onChange={(e) => { const newItems = [...items]; newItems[idx].description = e.target.value; setItems(newItems); }} placeholder="Item description" />
+                                    </div>
+                                    <div className="col-span-4 space-y-1">
+                                        <label className="text-[9px] font-bold text-gray-400 uppercase">HSN Code</label>
+                                        <input type="text" className="w-full h-8 bg-white rounded-lg px-2 text-xs font-bold border border-gray-200 outline-none focus:border-blue-500" value={item.hsnCode} onChange={(e) => { const newItems = [...items]; newItems[idx].hsnCode = e.target.value; setItems(newItems); }} />
+                                    </div>
+                                    <div className="col-span-2 space-y-1">
+                                        <label className="text-[9px] font-bold text-gray-400 uppercase">Qty</label>
+                                        <input type="number" className="w-full h-8 bg-white rounded-lg px-2 text-xs font-bold border border-gray-200 outline-none focus:border-blue-500" value={item.quantity} onChange={(e) => { const newItems = [...items]; newItems[idx].quantity = Number(e.target.value); setItems(newItems); }} />
+                                    </div>
+                                    <div className="col-span-3 space-y-1">
+                                        <label className="text-[9px] font-bold text-gray-400 uppercase">Rate</label>
+                                        <input type="number" className="w-full h-8 bg-white rounded-lg px-2 text-xs font-bold border border-gray-200 outline-none focus:border-blue-500" value={item.rate} onChange={(e) => { const newItems = [...items]; newItems[idx].rate = Number(e.target.value); setItems(newItems); }} />
+                                    </div>
+                                    <div className="col-span-3 space-y-1">
+                                        <label className="text-[9px] font-bold text-gray-400 uppercase">Total</label>
+                                        <div className="h-8 flex items-center px-2 text-xs font-black text-gray-700">
+                                            ₹ {(item.quantity * item.rate).toLocaleString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
-          </div>
+
+            <div className="p-6 border-t border-gray-100 bg-white flex justify-between items-center shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-20">
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Grand Total</span>
+                    <span className="text-xl font-black text-[#0854a0]">₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex space-x-3">
+                   <button 
+                        onClick={() => setShowPreview(!showPreview)}
+                        className="md:hidden p-3 bg-gray-100 rounded-xl text-gray-600"
+                   >
+                       {showPreview ? <EyeOff size={20} /> : <Eye size={20} />}
+                   </button>
+                   <button 
+                        onClick={() => {
+                            if(!selectedClient) return alert('Select a client');
+                            const invoice: Invoice = {
+                                id: initialInvoice?.id || `INV-${Date.now()}`,
+                                invoiceNumber,
+                                date: invoiceDate,
+                                branchId: activeBranch?.id || '',
+                                branchName: activeBranch?.name || '',
+                                clientId: selectedClient.id,
+                                clientName: selectedClient.name,
+                                clientGstin: selectedClient.gstin,
+                                kindAttn,
+                                placeOfSupply,
+                                items,
+                                subTotal,
+                                taxAmount,
+                                grandTotal,
+                                status: initialInvoice?.status || 'Posted'
+                            };
+                            onPost(invoice);
+                        }}
+                        className="px-8 py-3 bg-[#0854a0] text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#064280] shadow-xl shadow-blue-100 transition-all active:scale-95 flex items-center"
+                   >
+                        <Zap size={16} className="mr-2" /> {initialInvoice ? 'Update Invoice' : 'Post Invoice'}
+                   </button>
+                </div>
+            </div>
         </div>
-      </div>
 
-      {showPreview && (
-        <div className="flex-1 bg-[#525659] overflow-y-auto p-12 flex flex-col items-center custom-scrollbar">
-          <div className="w-full max-w-[210mm] flex justify-between items-center mb-8 text-white px-4 no-print">
-            <span className="text-[12px] font-bold tracking-tight">Document preview (A4)</span>
-            <div className="flex space-x-4">
-              <button onClick={handleWhatsApp} className="flex items-center px-6 py-3.5 bg-green-600 text-white rounded-2xl text-[11px] font-bold transition-all shadow-xl hover:bg-green-500">
-                <MessageCircle size={18} className="mr-3" /> WhatsApp
-              </button>
-              <button onClick={handleDownloadPDF} className="flex items-center px-8 py-3.5 bg-[#0854a0] text-white rounded-2xl text-[11px] font-bold transition-all shadow-xl">
-                <Download size={18} className="mr-3" /> Export to PDF
-              </button>
-              <button onClick={() => setShowPreview(false)} className="flex items-center px-6 py-3.5 bg-white/10 text-white rounded-2xl text-[11px] font-bold border border-white/10 transition-all">
-                <EyeOff size={18} className="mr-3" /> Hide preview
-              </button>
+        {/* Live Preview Side */}
+        <div className={`w-full md:w-[55%] h-full bg-gray-100 overflow-y-auto p-10 flex justify-center items-start ${!showPreview ? 'hidden md:flex' : 'flex'}`}>
+            <div className="space-y-4">
+               <div className="flex justify-center space-x-4 mb-4 sticky top-0 z-30">
+                   <button onClick={handleDownloadPDF} className="bg-white/80 backdrop-blur px-4 py-2 rounded-full text-xs font-bold shadow-sm hover:shadow-md transition-all flex items-center text-gray-700">
+                      <Download size={14} className="mr-2" /> Download PDF
+                   </button>
+                   <button onClick={handleWhatsApp} className="bg-[#25D366]/90 backdrop-blur px-4 py-2 rounded-full text-xs font-bold shadow-sm hover:shadow-md transition-all flex items-center text-white">
+                      <MessageCircle size={14} className="mr-2" /> WhatsApp
+                   </button>
+               </div>
+               <div className="shadow-2xl origin-top transform transition-transform duration-300 scale-[0.55] sm:scale-[0.65] md:scale-[0.6] lg:scale-[0.7] xl:scale-[0.8]">
+                   <InvoiceDocument />
+               </div>
             </div>
-          </div>
-          <div className="shadow-2xl">
-            <InvoiceDocument />
-          </div>
         </div>
-      )}
     </div>
   );
 };

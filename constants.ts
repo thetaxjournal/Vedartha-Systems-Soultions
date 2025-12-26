@@ -16,6 +16,15 @@ export const HSN_MASTER = [
   { code: '998319', description: 'OTHER MANAGEMENT CONSULTANCY' },
 ];
 
+export const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", 
+  "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", 
+  "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", 
+  "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+];
+
 export const INITIAL_BRANCHES: Branch[] = [
   {
     id: 'B001',
@@ -34,7 +43,13 @@ export const INITIAL_BRANCHES: Branch[] = [
     pan: 'AALFD7157J',
     defaultTaxRate: 18,
     invoicePrefix: 'VED-BLR-',
-    nextInvoiceNumber: 2075060834
+    nextInvoiceNumber: 2075060834,
+    bankDetails: {
+      bankName: 'RBL BANK LTD',
+      branchName: 'Lower Parel, Mumbai',
+      accountNumber: '409000032439',
+      ifscCode: 'RATN0000088'
+    }
   }
 ];
 
@@ -46,7 +61,7 @@ export const APP_CONFIG = {
   dateFormat: 'DD-MMM-YYYY',
   bankDetails: {
     bankName: 'RBL BANK LTD',
-    address: 'Tower 2, 3rd Floor, One Indiabulls Centre, Senapati Bapat Marg, Lower Parel, Mumbai - 400 013.',
+    branchName: 'Lower Parel, Mumbai',
     accountNumber: '409000032439',
     ifscCode: 'RATN0000088'
   }

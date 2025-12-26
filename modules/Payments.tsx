@@ -63,27 +63,40 @@ const Payments: React.FC<PaymentsProps> = ({ invoices, payments, branches, onRec
     setViewingPayment(newPayment);
   };
 
-  const handlePrint = () => {
+  const executePrintAndShare = (shouldShareWhatsApp: boolean) => {
+    if (!viewingPayment) return;
+
+    // 1. Change Title for Filename
+    const originalTitle = document.title;
+    document.title = `${viewingPayment.id}_Receipt`;
+
     setIsPrinting(true);
+    
+    // 2. Delay to allow render, then Print
     setTimeout(() => {
       window.print();
+      
+      // 3. Restore Title & Clean up
       setIsPrinting(false);
+      document.title = originalTitle;
+
+      // 4. Open WhatsApp if requested (after print dialog interaction)
+      if (shouldShareWhatsApp) {
+         const text = `Dear ${viewingPayment.clientName},%0A%0APlease find attached Payment Receipt *${viewingPayment.id}* for Invoice ${viewingPayment.invoiceNumber}.%0A%0A*Amount Paid:* ₹ ${(viewingPayment.amount || 0).toLocaleString('en-IN')}%0A*Reference:* ${viewingPayment.reference || 'N/A'}%0A%0ARegards,%0A${COMPANY_NAME}`;
+         // Small delay to ensure browser focus returns or handles the new tab correctly
+         setTimeout(() => {
+             window.open(`https://wa.me/?text=${text}`, '_blank');
+         }, 1000);
+      }
     }, 500);
   };
 
-  const handleWhatsAppShare = () => {
-    if (!viewingPayment) return;
-    
-    // 1. Trigger print so user can save PDF
-    handlePrint();
+  const handlePrint = () => {
+    executePrintAndShare(false);
+  };
 
-    // 2. Open WhatsApp with pre-filled text
-    const text = `Dear ${viewingPayment.clientName},%0A%0APlease find attached Payment Receipt *${viewingPayment.id}* for Invoice ${viewingPayment.invoiceNumber}.%0A%0A*Amount Paid:* ₹ ${(viewingPayment.amount || 0).toLocaleString('en-IN')}%0A*Reference:* ${viewingPayment.reference || 'N/A'}%0A%0ARegards,%0A${COMPANY_NAME}`;
-    
-    setTimeout(() => {
-        window.open(`https://wa.me/?text=${text}`, '_blank');
-        alert("WhatsApp opened. Please drag and drop the saved Receipt PDF into the chat.");
-    }, 1500);
+  const handleWhatsAppShare = () => {
+    executePrintAndShare(true);
   };
 
   const ReceiptDocument = ({ payment }: { payment: Payment }) => {
@@ -191,7 +204,7 @@ const Payments: React.FC<PaymentsProps> = ({ invoices, payments, branches, onRec
           <div className="flex justify-between items-start">
             <div className="w-1/2 flex items-center space-x-8">
                <div className="p-1 border border-[#000000]">
-                  <QRCode value={qrValue} size={90} level="H" fgColor="#000000" />
+                  <QRCode value={qrValue} size={150} level="H" fgColor="#000000" />
                </div>
                <div className="space-y-1">
                   <p className="text-[8px] font-bold uppercase">Digital signature</p>
