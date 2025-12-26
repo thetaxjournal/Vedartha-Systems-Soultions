@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Palette, 
   Lock, 
@@ -14,9 +14,10 @@ import {
   ShieldAlert,
   UserPlus,
   Users,
-  CalendarClock
+  CalendarClock,
+  Upload
 } from 'lucide-react';
-import { Invoice, Client, Branch, Payment, UserRole, UserProfile } from '../types';
+import { Invoice, Client, Branch, Payment, UserRole, UserProfile, AppNotification } from '../types';
 
 interface SettingsProps {
   state?: {
@@ -24,13 +25,15 @@ interface SettingsProps {
     clients: Client[];
     branches: Branch[];
     payments: Payment[];
+    notifications?: AppNotification[];
   };
   onAddUser?: (user: Omit<UserProfile, 'uid'>) => Promise<void>;
   onPurgeData?: () => Promise<void>;
   onCloseFinancialYear?: () => Promise<void>;
+  onRestoreData?: (data: any) => Promise<void>;
 }
 
-const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCloseFinancialYear }) => {
+const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCloseFinancialYear, onRestoreData }) => {
   const [newUser, setNewUser] = useState({
     email: '',
     displayName: '',
@@ -38,6 +41,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
     branchId: 'ALL'
   });
   const [isAddingUser, setIsAddingUser] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBackup = () => {
     if (!state) return;
@@ -50,6 +54,26 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+  };
+
+  const handleFileRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const json = JSON.parse(event.target?.result as string);
+            if (onRestoreData) {
+                await onRestoreData(json);
+            }
+        } catch (err) {
+            alert('Invalid Backup File. Please ensure it is a valid JSON file.');
+        }
+        // Clear input to allow re-uploading the same file if needed (conceptually "removing" it)
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsText(file);
   };
 
   const handleCreateUser = async () => {
@@ -153,7 +177,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
               <h3 className="font-black text-[#1c2d3d] text-sm uppercase tracking-tight">Database & Lifecycle Management</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                <div className="bg-white p-8 rounded-3xl border border-blue-100 shadow-sm flex flex-col items-center text-center space-y-4">
                   <div className="p-4 bg-blue-50 rounded-2xl text-blue-600">
                     <DownloadCloud size={32} />
@@ -170,7 +194,31 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
                   </button>
                </div>
 
-               {/* New Close Year Action */}
+               {/* Restore Action */}
+               <div className="bg-white p-8 rounded-3xl border border-purple-100 shadow-sm flex flex-col items-center text-center space-y-4">
+                  <div className="p-4 bg-purple-50 rounded-2xl text-purple-600">
+                    <Upload size={32} />
+                  </div>
+                  <h4 className="text-sm font-black text-gray-800 uppercase tracking-tighter">System Restore</h4>
+                  <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                    Upload a previous backup file to restore database records. This will merge/overwrite existing IDs.
+                  </p>
+                  <input 
+                    type="file" 
+                    accept=".json" 
+                    className="hidden" 
+                    ref={fileInputRef} 
+                    onChange={handleFileRestore} 
+                  />
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full mt-4 flex items-center justify-center px-6 py-4 bg-white border-2 border-purple-100 text-purple-600 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-purple-600 hover:text-white hover:border-purple-600 transition-all shadow-md group"
+                  >
+                    Upload & Restore <Upload size={16} className="ml-3 group-hover:scale-110 transition-transform" />
+                  </button>
+               </div>
+
+               {/* Close Year Action */}
                <div className="bg-white p-8 rounded-3xl border border-amber-100 shadow-sm flex flex-col items-center text-center space-y-4">
                   <div className="p-4 bg-amber-50 rounded-2xl text-amber-500">
                     <CalendarClock size={32} />

@@ -296,6 +296,40 @@ const App: React.FC = () => {
       }
   };
 
+  // --- RESTORE SYSTEM LOGIC ---
+  const handleRestoreSystem = async (backupData: any) => {
+    if (!confirm("WARNING: You are about to overwrite/merge the current database with this backup.\n\nExisting records with matching IDs will be updated. New records will be added.\n\nAre you sure you want to proceed?")) return;
+    
+    setLoading(true);
+    try {
+      const collections = [
+        { key: 'branches', dbName: 'branches' },
+        { key: 'clients', dbName: 'clients' },
+        { key: 'invoices', dbName: 'invoices' },
+        { key: 'payments', dbName: 'payments' },
+        { key: 'notifications', dbName: 'notifications' }
+      ];
+
+      for (const col of collections) {
+        if (Array.isArray(backupData[col.key])) {
+          for (const item of backupData[col.key]) {
+            // Ensure ID exists, if not generate one or skip? Assuming valid backup has IDs.
+            if (item.id) {
+               await setDoc(doc(db, col.dbName, item.id), item);
+            }
+          }
+        }
+      }
+      
+      alert("System Restore Complete. Database has been updated from the backup file.");
+    } catch (e) {
+      console.error(e);
+      alert("Error restoring data. Please ensure the file is a valid system backup.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- CLOSE FINANCIAL YEAR LOGIC ---
   const handleCloseFinancialYear = async () => {
     const confirmMsg = `CLOSE FINANCIAL YEAR & RESET PORTAL?\n\nThis action will:\n1. PERMANENTLY DELETE ALL Invoices, Payments, and Tickets.\n2. Reset all dashboard counters to ZERO.\n\nSAFE DATA:\n- Client Master Records will NOT be deleted.\n- Branch Configurations will NOT be deleted.\n\nAre you sure you want to proceed?`;
@@ -438,10 +472,11 @@ const App: React.FC = () => {
         if (isBranchManager) return <div>Access Denied</div>;
         return (
           <Settings 
-            state={{ invoices, clients, branches, payments }} 
+            state={{ invoices, clients, branches, payments, notifications }} // Included notifications in state
             onAddUser={handleAddUser}
             onPurgeData={handlePurgeSystem}
             onCloseFinancialYear={handleCloseFinancialYear}
+            onRestoreData={handleRestoreSystem} // Pass restore handler
           />
         );
       default:
