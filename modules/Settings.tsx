@@ -13,7 +13,8 @@ import {
   DownloadCloud,
   ShieldAlert,
   UserPlus,
-  Users
+  Users,
+  CalendarClock
 } from 'lucide-react';
 import { Invoice, Client, Branch, Payment, UserRole, UserProfile } from '../types';
 
@@ -25,9 +26,11 @@ interface SettingsProps {
     payments: Payment[];
   };
   onAddUser?: (user: Omit<UserProfile, 'uid'>) => Promise<void>;
+  onPurgeData?: () => Promise<void>;
+  onCloseFinancialYear?: () => Promise<void>;
 }
 
-const Settings: React.FC<SettingsProps> = ({ state, onAddUser }) => {
+const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCloseFinancialYear }) => {
   const [newUser, setNewUser] = useState({
     email: '',
     displayName: '',
@@ -150,7 +153,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser }) => {
               <h3 className="font-black text-[#1c2d3d] text-sm uppercase tracking-tight">Database & Lifecycle Management</h3>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                <div className="bg-white p-8 rounded-3xl border border-blue-100 shadow-sm flex flex-col items-center text-center space-y-4">
                   <div className="p-4 bg-blue-50 rounded-2xl text-blue-600">
                     <DownloadCloud size={32} />
@@ -167,6 +170,23 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser }) => {
                   </button>
                </div>
 
+               {/* New Close Year Action */}
+               <div className="bg-white p-8 rounded-3xl border border-amber-100 shadow-sm flex flex-col items-center text-center space-y-4">
+                  <div className="p-4 bg-amber-50 rounded-2xl text-amber-500">
+                    <CalendarClock size={32} />
+                  </div>
+                  <h4 className="text-sm font-black text-gray-800 uppercase tracking-tighter">Close Financial Year</h4>
+                  <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                    Archive all transactions prior to current FY start. Resets dashboard to zero. Keeps Client Master.
+                  </p>
+                  <button 
+                    onClick={onCloseFinancialYear}
+                    className="w-full mt-4 flex items-center justify-center px-6 py-4 bg-white border-2 border-amber-100 text-amber-600 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-md"
+                  >
+                    End Financial Year
+                  </button>
+               </div>
+
                <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center text-center space-y-4">
                   <div className="p-4 bg-rose-50 rounded-2xl text-rose-500">
                     <ShieldAlert size={32} />
@@ -175,7 +195,10 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser }) => {
                   <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
                     Clear all transactional cache and reset the system to factory master data. Use with caution.
                   </p>
-                  <button className="w-full mt-4 flex items-center justify-center px-6 py-4 bg-white border-2 border-rose-100 text-rose-500 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all shadow-md">
+                  <button 
+                    onClick={onPurgeData}
+                    className="w-full mt-4 flex items-center justify-center px-6 py-4 bg-white border-2 border-rose-100 text-rose-500 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all shadow-md"
+                  >
                     Reset To Master
                   </button>
                </div>

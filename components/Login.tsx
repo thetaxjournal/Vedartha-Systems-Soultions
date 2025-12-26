@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Lock, User, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
 import { COMPANY_LOGO } from '../constants';
 import { auth, db } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { UserRole } from '../types';
 
@@ -16,11 +16,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Sign up state removed as per request to remove "Create Account"
-  // kept isSignUp false logic internally if you ever need to revert, 
-  // but UI triggers are removed.
-  const isSignUp = false; 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +80,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 className="h-16 object-contain"
               />
             </div>
-            {/* Removed Text per user request */}
+            <h2 className="text-xl font-black text-gray-800 tracking-tight uppercase mb-1">
+              Vedartha International Limited
+            </h2>
           </div>
 
           <form onSubmit={handleSubmit} className="p-10 pt-4 space-y-6">
@@ -129,7 +126,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-[#0854a0] focus:ring-[#0854a0]" />
                 <span className="ml-3 text-[11px] font-bold text-gray-500 group-hover:text-gray-700">Remember me</span>
               </label>
-              {/* Removed Recover Account link */}
             </div>
 
             <button 
@@ -141,8 +137,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                  <>Secure Access <ArrowRight size={18} className="ml-3 group-hover:translate-x-1 transition-transform" /></>
               )}
             </button>
-            
-            {/* Removed Admin Setup Link */}
           </form>
 
           <div className="p-8 bg-gray-50/50 border-t border-gray-100 text-center">

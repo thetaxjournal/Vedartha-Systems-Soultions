@@ -29,7 +29,9 @@ import {
   query,
   where,
   orderBy,
-  getDoc
+  getDoc,
+  deleteDoc,
+  getDocs
 } from 'firebase/firestore';
 
 const App: React.FC = () => {
@@ -267,7 +269,70 @@ const App: React.FC = () => {
       });
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600">Loading Cloud Resources...</div>;
+  // --- PURGE SYSTEM LOGIC ---
+  const handlePurgeSystem = async () => {
+      if (!confirm("CRITICAL WARNING:\n\nThis will PERMANENTLY DELETE all:\n- Invoices\n- Clients\n- Payments\n- Support Tickets\n\nThis action cannot be undone. Are you sure you want to proceed?")) {
+          return;
+      }
+      
+      if (!confirm("Final Confirmation: Do you really want to wipe the database?")) return;
+
+      setLoading(true);
+      try {
+          const collections = ['invoices', 'clients', 'payments', 'notifications'];
+          
+          for (const colName of collections) {
+              const q = query(collection(db, colName));
+              const snapshot = await getDocs(q);
+              const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+              await Promise.all(deletePromises);
+          }
+          alert("System Purge Complete. All records have been deleted.");
+      } catch (error) {
+          console.error("Purge failed", error);
+          alert("System Purge Failed. Please check console for details.");
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // --- CLOSE FINANCIAL YEAR LOGIC ---
+  const handleCloseFinancialYear = async () => {
+    // 1. Determine Current FY Start (April 1st of current cycle)
+    const today = new Date();
+    const currentMonth = today.getMonth(); // 0-11 (April is 3)
+    const currentYear = today.getFullYear();
+    // If today is Jan-Mar, the FY started April 1st of previous year.
+    // If today is April-Dec, the FY started April 1st of current year.
+    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const fyStartDate = new Date(fyStartYear, 3, 1); // April 1st
+    const fyStartDateString = fyStartDate.toISOString().split('T')[0];
+
+    const confirmMsg = `CLOSE FINANCIAL YEAR (${fyStartYear}-${fyStartYear+1})?\n\nThis action will:\n1. Archive all data.\n2. PERMANENTLY DELETE Invoices, Payments, and Tickets dated BEFORE ${fyStartDate.toLocaleDateString()}.\n3. Reset the dashboard to Zero for the new period.\n\nClients will NOT be deleted.`;
+    
+    if (!confirm(confirmMsg)) return;
+
+    setLoading(true);
+    try {
+        // Collections to clean
+        const collectionsToCheck = ['invoices', 'payments', 'notifications'];
+
+        for (const colName of collectionsToCheck) {
+             const q = query(collection(db, colName), where('date', '<', fyStartDateString));
+             const snapshot = await getDocs(q);
+             const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+             await Promise.all(deletePromises);
+        }
+        alert("Financial Year Closed. Old records purged. Dashboard reset.");
+    } catch(e) {
+        console.error(e);
+        alert("Error closing financial year.");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600 font-bold animate-pulse">Loading Cloud Resources...</div>;
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
@@ -372,7 +437,7 @@ const App: React.FC = () => {
         if (isBranchManager) return <div>Access Denied</div>;
         return <Branches branches={branches} setBranches={handleUpdateBranches} />;
       case 'Accounts':
-        return <Accounts invoices={invoices} payments={payments} />;
+        return <Accounts invoices={invoices} payments={payments} clients={clients} />;
       case 'Scanner':
         return <Scanner invoices={invoices} payments={payments} />;
       case 'Settings':
@@ -381,6 +446,8 @@ const App: React.FC = () => {
           <Settings 
             state={{ invoices, clients, branches, payments }} 
             onAddUser={handleAddUser}
+            onPurgeData={handlePurgeSystem}
+            onCloseFinancialYear={handleCloseFinancialYear}
           />
         );
       default:
