@@ -122,9 +122,11 @@ export interface AppNotification {
   clientName: string;
   subject: string;
   message: string;
-  status: 'Open' | 'Closed'; // Simplified Workflow
+  status: 'Open' | 'Closed' | 'Revoked'; // Simplified Workflow
   rating?: number; // 1-5 Stars
   feedback?: string; // Client feedback text
+  adminResponse?: string; // New: Admin Reply
+  responseDate?: string; // New: Date of reply
 }
 
 export type Module = 'Dashboard' | 'Invoices' | 'Payments' | 'Clients' | 'Branches' | 'Accounts' | 'Settings' | 'Scanner' | 'Notifications';

@@ -2,11 +2,11 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  FileText, Receipt, Download, Clock, CheckCircle2, AlertCircle, LogOut, Printer, X, ScanLine, MessageCircle, Send, Mail, Ticket, Star, ThumbsUp, ArrowLeft, Plus
+  FileText, Receipt, Download, Clock, CheckCircle2, AlertCircle, LogOut, Printer, X, ScanLine, MessageCircle, Send, Mail, Ticket, Star, ThumbsUp, ArrowLeft, Plus, Ban
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { Invoice, Payment, Client, Branch, AppNotification } from '../types';
-import { LOGO_DARK_BG, COMPANY_NAME, INITIAL_BRANCHES, generateSecureQR } from '../constants';
+import { LOGO_DARK_BG, COMPANY_NAME, INITIAL_BRANCHES, generateSecureQR, COMPANY_LOGO } from '../constants';
 import Scanner from './Scanner';
 
 interface ClientPortalProps {
@@ -20,12 +20,13 @@ interface ClientPortalProps {
   onLogout: () => void;
   onSendMessage: (subject: string, message: string, generatedTicketNumber: string) => Promise<void>;
   onFeedback: (ticketId: string, rating: number, feedback: string) => Promise<void>;
+  onRevokeTicket: (ticketId: string) => Promise<void>;
 }
 
-const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices, payments, branches, notifications = [], onLogout, onSendMessage, onFeedback }) => {
+const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices, payments, branches, notifications = [], onLogout, onSendMessage, onFeedback, onRevokeTicket }) => {
   const [activeTab, setActiveTab] = useState<'invoices' | 'payments' | 'scanner' | 'tickets'>('invoices');
   const [viewingReceipt, setViewingReceipt] = useState<Payment | null>(null);
-  const [viewingTicket, setViewingTicket] = useState<{ id: string, date: string, subject: string, message: string, ticketNumber: string } | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<AppNotification | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   
   // Message State
@@ -35,7 +36,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
   
   // Ticket View Mode: 'list' (History), 'new' (Form), 'success' (Post-submit)
   const [ticketMode, setTicketMode] = useState<'list' | 'new' | 'success'>('list');
-  const [lastSubmittedTicket, setLastSubmittedTicket] = useState<{ id: string, date: string, subject: string, message: string, ticketNumber: string } | null>(null);
+  const [lastSubmittedTicket, setLastSubmittedTicket] = useState<AppNotification | null>(null);
 
   // Feedback State
   const [feedbackTicketId, setFeedbackTicketId] = useState<string | null>(null);
@@ -45,10 +46,34 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
   // Fallback to initial if branches prop is empty
   const activeBranches = branches.length > 0 ? branches : INITIAL_BRANCHES;
 
-  // Filter for this specific client
-  const myInvoices = invoices.filter(inv => inv.clientId === user.clientId).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const myPayments = payments.filter(pay => pay.invoiceNumber.startsWith('VED') && myInvoices.some(inv => inv.id === pay.invoiceId)).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const myTickets = notifications.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Filter for this specific client and Sort by Date Descending
+  const myInvoices = useMemo(() => {
+    return invoices
+      .filter(inv => inv.clientId === user.clientId)
+      .sort((a,b) => {
+         const dateA = new Date(a.date).getTime();
+         const dateB = new Date(b.date).getTime();
+         if (dateB !== dateA) return dateB - dateA;
+         return b.id.localeCompare(a.id);
+      });
+  }, [invoices, user.clientId]);
+
+  const myPayments = useMemo(() => {
+    return payments
+      .filter(pay => pay.invoiceNumber.startsWith('VED') && myInvoices.some(inv => inv.id === pay.invoiceId))
+      .sort((a,b) => {
+         const dateA = new Date(a.date).getTime();
+         const dateB = new Date(b.date).getTime();
+         if (dateB !== dateA) return dateB - dateA;
+         return b.id.localeCompare(a.id);
+      });
+  }, [payments, myInvoices]);
+
+  const myTickets = useMemo(() => {
+    return notifications
+      .filter(n => n.status !== 'Revoked') // Hide revoked tickets from main view
+      .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [notifications]);
 
   // Determine effective ticket mode (Force 'new' if no history)
   const effectiveTicketMode = myTickets.length === 0 && ticketMode === 'list' ? 'new' : ticketMode;
@@ -74,7 +99,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
     }, 500);
   };
 
-  const handleTicketPrint = (ticketOverride?: any) => {
+  const handleTicketPrint = (ticketOverride?: AppNotification) => {
       const ticketToPrint = ticketOverride || viewingTicket;
       if (!ticketToPrint) return;
       
@@ -82,7 +107,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
       if (ticketOverride) setViewingTicket(ticketOverride);
 
       const originalTitle = document.title;
-      document.title = `${ticketToPrint.ticketNumber}_Details`;
+      document.title = `${ticketToPrint.ticketNumber || 'TKT'}_Details`;
       setIsPrinting(true);
       setTimeout(() => {
           window.print();
@@ -103,12 +128,16 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
 
      await onSendMessage(msgSubject, msgBody, generatedTicketNumber);
      
-     const ticketObj = {
-         id: 'NEW', // Placeholder ID as Firestore ID isn't immediate, but we have enough for PDF
+     const ticketObj: any = {
+         id: 'NEW', 
          date: timestamp,
          subject: msgSubject,
          message: msgBody,
-         ticketNumber: generatedTicketNumber
+         ticketNumber: generatedTicketNumber,
+         clientId: user.clientId,
+         clientName: user.displayName,
+         branchId: '', 
+         status: 'Open'
      };
 
      setMsgSending(false);
@@ -131,12 +160,13 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
   const totalOutstanding = myInvoices.filter(i => i.status === 'Posted').reduce((acc, i) => acc + (i.grandTotal || 0), 0);
   const lastPayment = myPayments.length > 0 ? myPayments[0] : null;
 
-  const TicketDocument = ({ ticket }: { ticket: { id: string, date: string, subject: string, message: string, ticketNumber: string } }) => {
+  const TicketDocument = ({ ticket }: { ticket: AppNotification }) => {
       return (
         <div className="bg-white w-[210mm] min-h-[297mm] p-[20mm] text-[#000000] font-sans flex flex-col relative print:p-[15mm]">
             <div className="flex justify-between items-start mb-12">
                 <div className="w-1/3">
-                    <img src={LOGO_DARK_BG} alt="Logo" className="h-14 object-contain invert brightness-0" />
+                    {/* Updated to use COMPANY_LOGO for consistency with invoices */}
+                    <img src={COMPANY_LOGO} alt="Logo" className="h-14 object-contain" />
                 </div>
                 <div className="w-1/3 text-center">
                     <h1 className="text-[20px] font-bold border-b-2 border-[#000000] inline-block leading-none pb-1">Support Ticket</h1>
@@ -174,10 +204,23 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                         {ticket.message}
                     </div>
                 </div>
-                <div>
+                
+                {ticket.adminResponse && (
+                    <div className="mt-8 border-t-2 border-black pt-6">
+                        <p className="text-[10px] font-bold uppercase tracking-widest mb-2 text-[#0854a0]">Official Response</p>
+                        <div className="bg-gray-50 p-4 border-l-4 border-[#0854a0] text-[11px] font-medium leading-relaxed">
+                            {ticket.adminResponse}
+                        </div>
+                        <div className="text-right text-[9px] mt-2 font-bold opacity-60">
+                            Responded on: {ticket.responseDate ? new Date(ticket.responseDate).toLocaleString('en-GB') : 'N/A'}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mt-8">
                     <p className="text-[10px] font-bold uppercase tracking-widest mb-2 border-b border-black/20 pb-1">Status</p>
                     <div className="text-[12px] font-bold uppercase">
-                        Ticket Open / In Progress
+                        {ticket.status === 'Closed' ? 'Resolved & Closed' : ticket.status}
                     </div>
                 </div>
             </div>
@@ -532,6 +575,13 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                                 </div>
                                                 <h4 className="font-bold text-base text-gray-800 mb-1">{ticket.subject}</h4>
                                                 <p className="text-xs text-gray-500 line-clamp-1 max-w-xl">{ticket.message}</p>
+                                                {/* Show response snippet in list if resolved */}
+                                                {ticket.adminResponse && (
+                                                    <div className="mt-2 p-3 bg-blue-50/50 rounded-lg border border-blue-50">
+                                                        <p className="text-[10px] font-black text-[#0854a0] uppercase tracking-widest mb-1">Response</p>
+                                                        <p className="text-[11px] text-gray-700 font-medium">{ticket.adminResponse}</p>
+                                                    </div>
+                                                )}
                                             </div>
                                             
                                             <div className="flex items-center space-x-4">
@@ -547,6 +597,15 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                                     <div className="flex text-amber-400">
                                                         {[...Array(ticket.rating)].map((_, i) => <Star key={i} size={12} fill="currentColor" />)}
                                                     </div>
+                                                )}
+                                                {ticket.status === 'Open' && (
+                                                    <button 
+                                                        onClick={() => onRevokeTicket(ticket.id)}
+                                                        className="text-[10px] font-bold text-rose-500 hover:text-white hover:bg-rose-500 px-3 py-2 rounded-lg transition-colors border border-rose-100"
+                                                        title="Revoke Ticket"
+                                                    >
+                                                        Revoke
+                                                    </button>
                                                 )}
                                                 <button 
                                                     onClick={() => handleTicketPrint(ticket)}
@@ -633,7 +692,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                </p>
                                <div className="space-y-4 w-full">
                                    <button 
-                                        onClick={() => handleTicketPrint(lastSubmittedTicket)}
+                                        onClick={() => handleTicketPrint(lastSubmittedTicket as AppNotification)}
                                         className="w-full bg-[#0854a0] text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-[#064280] shadow-lg flex items-center justify-center transition-all hover:scale-[1.02]"
                                    >
                                         <Download size={16} className="mr-2" /> Download Ticket PDF

@@ -305,7 +305,7 @@ const InvoiceCreation: React.FC<InvoiceCreationProps> = ({ branches, activeBranc
             </div>
 
             <div className="text-right flex flex-col items-end">
-              <p className="text-[10px] font-medium text-[#000000] mb-1 italic">This document is digitally signed</p>
+              <p className="text-[10px] font-bold text-[#000000] mb-1">For Vedartha International Limited</p>
               <div className="text-right space-y-1">
                  <div className="relative w-64 h-16 border-b border-dotted border-[#000000]"></div>
                  <div className="pt-2">

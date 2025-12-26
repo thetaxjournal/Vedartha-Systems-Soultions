@@ -109,19 +109,33 @@ const App: React.FC = () => {
 
     // Invoices Listener
     const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
-      const sorted = snapshot.docs.map(doc => doc.data() as Invoice).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const sorted = snapshot.docs.map(doc => doc.data() as Invoice).sort((a,b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateB !== dateA) return dateB - dateA; // Newest date first
+        return b.id.localeCompare(a.id); // Tie-breaker: Newer ID first
+      });
       setInvoices(sorted);
     });
 
     // Payments Listener
     const unsubPayments = onSnapshot(collection(db, 'payments'), (snapshot) => {
-      const sorted = snapshot.docs.map(doc => doc.data() as Payment).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const sorted = snapshot.docs.map(doc => doc.data() as Payment).sort((a,b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateB !== dateA) return dateB - dateA;
+        return b.id.localeCompare(a.id);
+      });
       setPayments(sorted);
     });
     
     // Notifications Listener (New)
     const unsubNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
-        const sorted = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as AppNotification)).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const sorted = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as AppNotification)).sort((a,b) => {
+            const dateA = new Date(a.date).getTime();
+            const dateB = new Date(b.date).getTime();
+            return dateB - dateA; // Date includes time, usually sufficient
+        });
         setNotifications(sorted);
     });
 
@@ -229,6 +243,22 @@ const App: React.FC = () => {
       await updateDoc(doc(db, 'notifications', ticketId), { status: 'Closed' });
   };
 
+  // Reply to Ticket (Admin)
+  const handleReplyTicket = async (ticketId: string, response: string) => {
+      await updateDoc(doc(db, 'notifications', ticketId), { 
+          adminResponse: response,
+          responseDate: new Date().toISOString(),
+          status: 'Closed' // Automatically close on reply to streamline workflow
+      });
+  };
+
+  // Revoke Ticket (Client)
+  const handleRevokeTicket = async (ticketId: string) => {
+      if (confirm('Are you sure you want to revoke this ticket? This action cannot be undone.')) {
+          await updateDoc(doc(db, 'notifications', ticketId), { status: 'Revoked' }); 
+      }
+  };
+
   // Submit Feedback (Client)
   const handleTicketFeedback = async (ticketId: string, rating: number, feedback: string) => {
       await updateDoc(doc(db, 'notifications', ticketId), { 
@@ -257,6 +287,7 @@ const App: React.FC = () => {
          onLogout={handleLogout}
          onSendMessage={handleClientMessage}
          onFeedback={handleTicketFeedback}
+         onRevokeTicket={handleRevokeTicket}
       />
     );
   }
@@ -293,6 +324,7 @@ const App: React.FC = () => {
             <Notifications 
                 notifications={filteredNotifications} 
                 onCloseTicket={handleCloseTicket}
+                onReplyTicket={handleReplyTicket}
             />
         );
       case 'Invoices':
@@ -340,7 +372,7 @@ const App: React.FC = () => {
         if (isBranchManager) return <div>Access Denied</div>;
         return <Branches branches={branches} setBranches={handleUpdateBranches} />;
       case 'Accounts':
-        return <Accounts invoices={invoices} />;
+        return <Accounts invoices={invoices} payments={payments} />;
       case 'Scanner':
         return <Scanner invoices={invoices} payments={payments} />;
       case 'Settings':
