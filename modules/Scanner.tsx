@@ -161,7 +161,8 @@ const Scanner: React.FC<ScannerProps> = ({ invoices, payments }) => {
                 )}
                 <div className="flex justify-between text-xl font-black text-[#0854a0] pt-2">
                    <span>Total Value</span>
-                   <span>₹ {(data.grandTotal || data.amount).toLocaleString('en-IN')}</span>
+                   {/* Safely handle potentially undefined grandTotal or amount */}
+                   <span>₹ {((data.grandTotal || data.amount) || 0).toLocaleString('en-IN')}</span>
                 </div>
              </div>
           </div>

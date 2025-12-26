@@ -89,15 +89,15 @@ const Accounts: React.FC<AccountsProps> = ({ invoices, payments, clients }) => {
          const d = new Date(inv.date);
          const key = d.toLocaleString('default', { month: 'long', year: 'numeric' });
          if (!monthStats[key]) monthStats[key] = { revenue: 0, tax: 0, collected: 0, monthSort: d.getTime() };
-         monthStats[key].revenue += inv.grandTotal;
-         monthStats[key].tax += inv.taxAmount;
+         monthStats[key].revenue += (inv.grandTotal || 0);
+         monthStats[key].tax += (inv.taxAmount || 0);
      });
 
      filteredData.payments.forEach(pay => {
          const d = new Date(pay.date);
          const key = d.toLocaleString('default', { month: 'long', year: 'numeric' });
          if (!monthStats[key]) monthStats[key] = { revenue: 0, tax: 0, collected: 0, monthSort: d.getTime() };
-         monthStats[key].collected += pay.amount;
+         monthStats[key].collected += (pay.amount || 0);
      });
 
      return Object.entries(monthStats)
@@ -113,7 +113,7 @@ const Accounts: React.FC<AccountsProps> = ({ invoices, payments, clients }) => {
         date: inv.date,
         docRef: inv.invoiceNumber,
         description: `Invoice to ${inv.clientName}`,
-        amount: inv.grandTotal, 
+        amount: inv.grandTotal || 0, 
         type: 'INVOICE'
       })),
       ...filteredData.payments.map(pay => ({
@@ -121,7 +121,7 @@ const Accounts: React.FC<AccountsProps> = ({ invoices, payments, clients }) => {
         date: pay.date,
         docRef: pay.id,
         description: `Payment Received (CR) - ${pay.method}`,
-        amount: pay.amount,
+        amount: pay.amount || 0,
         type: 'PAYMENT'
       }))
     ];

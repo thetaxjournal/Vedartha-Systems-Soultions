@@ -170,14 +170,14 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
 
         <div className="flex justify-end mt-4 text-[11px] shrink-0 text-[#000000]">
           <div className="w-72 space-y-1">
-            <div className="flex justify-between items-center"><span className="font-bold">Amount</span><span className="w-36 flex justify-between"><span>:</span><span>{invoice.subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            <div className="flex justify-between items-center"><span className="font-bold">Amount</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
             
             {isInterState ? (
-                <div className="flex justify-between items-center"><span className="font-bold">IGST @ 18.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{invoice.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                <div className="flex justify-between items-center"><span className="font-bold">IGST @ 18.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
             ) : (
                 <>
-                    <div className="flex justify-between items-center"><span className="font-bold">CGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
-                    <div className="flex justify-between items-center"><span className="font-bold">SGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                    <div className="flex justify-between items-center"><span className="font-bold">CGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{((invoice.taxAmount || 0)/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                    <div className="flex justify-between items-center"><span className="font-bold">SGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{((invoice.taxAmount || 0)/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
                 </>
             )}
 
@@ -186,7 +186,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
               <span className="font-bold">Gross amount</span>
               <span className="w-36 flex justify-between">
                 <span>:</span>
-                <span className="font-bold">{invoice.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                <span className="font-bold">{(invoice.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </span>
             </div>
             <div className="h-[0.5px] bg-[#000000] mt-0.5"></div>
@@ -194,7 +194,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ invoices, clients, branches, 
         </div>
 
         <div className="mt-4 text-[11px] font-bold text-[#000000] shrink-0">
-          {numberToWords(invoice.grandTotal)}
+          {numberToWords(invoice.grandTotal || 0)}
         </div>
 
         <div className="mt-6 border-t-[1.5px] border-b-[1.5px] border-[#000000] py-3 grid grid-cols-2 gap-x-12 text-[10px] leading-[1.4] text-[#000000] shrink-0">

@@ -298,32 +298,26 @@ const App: React.FC = () => {
 
   // --- CLOSE FINANCIAL YEAR LOGIC ---
   const handleCloseFinancialYear = async () => {
-    // 1. Determine Current FY Start (April 1st of current cycle)
-    const today = new Date();
-    const currentMonth = today.getMonth(); // 0-11 (April is 3)
-    const currentYear = today.getFullYear();
-    // If today is Jan-Mar, the FY started April 1st of previous year.
-    // If today is April-Dec, the FY started April 1st of current year.
-    const fyStartYear = currentMonth >= 3 ? currentYear : currentYear - 1;
-    const fyStartDate = new Date(fyStartYear, 3, 1); // April 1st
-    const fyStartDateString = fyStartDate.toISOString().split('T')[0];
-
-    const confirmMsg = `CLOSE FINANCIAL YEAR (${fyStartYear}-${fyStartYear+1})?\n\nThis action will:\n1. Archive all data.\n2. PERMANENTLY DELETE Invoices, Payments, and Tickets dated BEFORE ${fyStartDate.toLocaleDateString()}.\n3. Reset the dashboard to Zero for the new period.\n\nClients will NOT be deleted.`;
+    const confirmMsg = `CLOSE FINANCIAL YEAR & RESET PORTAL?\n\nThis action will:\n1. PERMANENTLY DELETE ALL Invoices, Payments, and Tickets.\n2. Reset all dashboard counters to ZERO.\n\nSAFE DATA:\n- Client Master Records will NOT be deleted.\n- Branch Configurations will NOT be deleted.\n\nAre you sure you want to proceed?`;
     
     if (!confirm(confirmMsg)) return;
+    if (!confirm("Double Check: Have you downloaded your Backup/Reports? This cannot be undone.")) return;
 
     setLoading(true);
     try {
-        // Collections to clean
-        const collectionsToCheck = ['invoices', 'payments', 'notifications'];
+        // Collections to clean (Transactions only)
+        // STRICTLY EXCLUDING 'clients' and 'branches' and 'users' to prevent master data loss
+        const collectionsToReset = ['invoices', 'payments', 'notifications'];
 
-        for (const colName of collectionsToCheck) {
-             const q = query(collection(db, colName), where('date', '<', fyStartDateString));
+        for (const colName of collectionsToReset) {
+             // Query all docs in the collection to ensure a full reset to "Zero"
+             const q = query(collection(db, colName)); 
              const snapshot = await getDocs(q);
              const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
              await Promise.all(deletePromises);
         }
-        alert("Financial Year Closed. Old records purged. Dashboard reset.");
+        
+        alert("Financial Year Closed. Transaction data wiped. Dashboard is now Zero. Client Master and Branches preserved.");
     } catch(e) {
         console.error(e);
         alert("Error closing financial year.");

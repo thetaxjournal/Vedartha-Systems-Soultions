@@ -240,7 +240,6 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
   };
 
   const ReceiptDocument = ({ payment }: { payment: Payment }) => {
-    // ... (Keep existing ReceiptDocument code exactly same)
     const inv = invoices.find(i => i.id === payment.invoiceId);
     const branch = activeBranches.find(b => b.id === inv?.branchId) || activeBranches[0];
 
@@ -417,7 +416,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Last Payment</p>
                <h2 className="text-3xl font-black text-emerald-600 mt-2">
-                  {lastPayment ? `₹ ${lastPayment.amount.toLocaleString('en-IN')}` : '---'}
+                  {lastPayment ? `₹ ${(lastPayment.amount || 0).toLocaleString('en-IN')}` : '---'}
                </h2>
                <p className="mt-4 text-xs font-bold text-gray-500">
                   {lastPayment ? `On ${new Date(lastPayment.date).toLocaleDateString()}` : 'No history'}
@@ -489,7 +488,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                               <div className="flex items-center justify-between md:justify-end md:space-x-8 w-full md:w-auto">
                                  <div className="text-right">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase">Amount</p>
-                                    <p className="text-lg font-black text-gray-900">₹ {inv.grandTotal.toLocaleString('en-IN')}</p>
+                                    <p className="text-lg font-black text-gray-900">₹ {(inv.grandTotal || 0).toLocaleString('en-IN')}</p>
                                  </div>
                                  <div className="flex items-center text-gray-500 font-bold text-xs bg-gray-50 px-3 py-1.5 rounded-lg">
                                     {inv.status}
@@ -520,7 +519,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                               <div className="flex items-center justify-between md:justify-end md:space-x-8 w-full md:w-auto">
                                  <div className="text-right">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase">Amount Paid</p>
-                                    <p className="text-lg font-black text-gray-900">₹ {pay.amount.toLocaleString('en-IN')}</p>
+                                    <p className="text-lg font-black text-gray-900">₹ {(pay.amount || 0).toLocaleString('en-IN')}</p>
                                  </div>
                                  <button onClick={() => setViewingReceipt(pay)} className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-colors" title="Download Receipt">
                                     <Download size={20} />
@@ -537,10 +536,10 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                      <Scanner invoices={invoices} payments={payments} />
                   </div>
                )}
-
+               
+               {/* Tickets logic remains same */}
                {activeTab === 'tickets' && (
                    <div className="max-w-5xl mx-auto py-4">
-                       
                        {/* 1. Ticket List View */}
                        {effectiveTicketMode === 'list' && (
                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -556,7 +555,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                         <Plus size={16} className="mr-2" /> Raise New Ticket
                                     </button>
                                 </div>
-
+                                {/* ... rest of ticket list ... */}
                                 <div className="grid gap-4">
                                     {myTickets.map(ticket => (
                                         <div key={ticket.id} className="bg-white border border-gray-100 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group">
