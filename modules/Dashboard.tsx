@@ -20,24 +20,62 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ invoices, clients, branches, payments }) => {
-  // Added ( || 0) to ensure we don't try to add undefined numbers
+  // Metric Calculations based on active props (which are zeroed out if FY closed)
   const mtdRevenue = invoices.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
   const totalTaxCollected = invoices.reduce((acc, inv) => acc + (inv.taxAmount || 0), 0);
   const receivableCount = invoices.filter(inv => inv.status === 'Posted').length;
+  // Note: Previous logic summed total revenue for "Receivables", keeping it for consistency as "Total Value of Posted"
   const receivableValue = invoices.reduce((acc, inv) => acc + (inv.grandTotal || 0), 0);
 
-  const chartData = [
-    { name: 'Jan', revenue: 450000, expenses: 320000 },
-    { name: 'Feb', revenue: 520000, expenses: 380000 },
-    { name: 'Mar', revenue: 480000, expenses: 350000 },
-    { name: 'Current', revenue: mtdRevenue, expenses: mtdRevenue * 0.7 },
-  ];
+  // Dynamic Chart Data Calculation
+  const chartData = React.useMemo(() => {
+      // If no invoices (e.g. fresh year), show flat zero line
+      if (invoices.length === 0) {
+          return [
+            { name: 'Start', revenue: 0, expenses: 0 },
+            { name: 'End', revenue: 0, expenses: 0 },
+          ];
+      }
+
+      const monthMap = new Map<string, number>();
+      const today = new Date();
+      // Initialize a few months back if needed, or just map existing data
+      
+      invoices.forEach(inv => {
+          const date = new Date(inv.date);
+          const month = date.toLocaleString('default', { month: 'short' });
+          monthMap.set(month, (monthMap.get(month) || 0) + (inv.grandTotal || 0));
+      });
+
+      const data = Array.from(monthMap.entries()).map(([name, val]) => ({
+          name,
+          revenue: val,
+          expenses: val * 0.6 // Simulated expense ratio
+      }));
+      
+      // Add previous point for better visual if only one month exists
+      if (data.length === 1) {
+          data.unshift({ name: 'Prev', revenue: 0, expenses: 0 });
+      } else if (data.length === 0) {
+          // Fallback if loop didn't produce data
+          return [
+            { name: 'Start', revenue: 0, expenses: 0 },
+            { name: 'End', revenue: 0, expenses: 0 },
+          ];
+      }
+      
+      return data;
+  }, [invoices]);
 
   const pieData = branches.map(b => ({
     name: b.name.split('-')[1]?.trim() || b.name,
-    // Ensure reduce handles missing grandTotal safely
-    value: invoices.filter(inv => inv.branchId === b.id).reduce((acc, inv) => acc + (inv.grandTotal || 0), 0) || 100
+    value: invoices.filter(inv => inv.branchId === b.id).reduce((acc, inv) => acc + (inv.grandTotal || 0), 0) || 0
   }));
+  
+  // If pie data is all zero, show a placeholder to avoid empty chart glitch
+  const isPieEmpty = pieData.every(d => d.value === 0);
+  const displayPieData = isPieEmpty ? [{ name: 'No Data', value: 1 }] : pieData;
+  const PIE_COLORS = isPieEmpty ? ['#e2e8f0'] : ['#0854a0', '#10b981', '#f59e0b', '#ef4444'];
 
   const COLORS = ['#0854a0', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -85,7 +123,7 @@ const Dashboard: React.FC<DashboardProps> = ({ invoices, clients, branches, paym
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Revenue (MTD)', value: `₹ ${(mtdRevenue || 0).toLocaleString('en-IN')}`, trend: '+12.5%', icon: TrendingUp, color: 'blue', sub: 'vs Previous Period' },
+          { label: 'Revenue (MTD)', value: `₹ ${(mtdRevenue || 0).toLocaleString('en-IN')}`, trend: invoices.length > 0 ? '+ Active' : 'No Data', icon: TrendingUp, color: 'blue', sub: 'vs Previous Period' },
           { label: 'Tax Collected', value: `₹ ${(totalTaxCollected || 0).toLocaleString('en-IN')}`, trend: 'GST/TDS', icon: Landmark, color: 'purple', sub: 'Liability Accrued' },
           { label: 'Receivables', value: `₹ ${(receivableValue || 0).toLocaleString('en-IN')}`, trend: receivableCount.toString(), icon: Clock, color: 'amber', sub: 'Open Vouchers' },
           { label: 'Partner Network', value: clients.length.toString(), trend: 'Verified', icon: Users, color: 'emerald', sub: 'Active Entities' },
@@ -99,7 +137,7 @@ const Dashboard: React.FC<DashboardProps> = ({ invoices, clients, branches, paym
                   <div className={`p-3 rounded-2xl ${styles.bg} ${styles.text} group-hover:bg-[#003366] group-hover:text-white transition-all`}>
                     <stat.icon size={20} />
                   </div>
-                  {idx === 0 && <ArrowUpRight size={18} className="text-emerald-500" />}
+                  {idx === 0 && invoices.length > 0 && <ArrowUpRight size={18} className="text-emerald-500" />}
                 </div>
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">{stat.label}</p>
                 <h3 className="text-2xl font-black text-[#003366] tracking-tighter">{stat.value}</h3>
@@ -202,38 +240,41 @@ const Dashboard: React.FC<DashboardProps> = ({ invoices, clients, branches, paym
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
-                  data={pieData} 
+                  data={displayPieData} 
                   innerRadius={75} 
                   outerRadius={100} 
-                  paddingAngle={8} 
+                  paddingAngle={isPieEmpty ? 0 : 8} 
                   dataKey="value"
                   stroke="none"
                 >
-                  {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                  {displayPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</span>
-              <span className="text-xl font-black text-[#003366]">100%</span>
+              <span className="text-xl font-black text-[#003366]">{isPieEmpty ? '0%' : '100%'}</span>
             </div>
           </div>
 
           <div className="mt-10 w-full space-y-4">
-            {pieData.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center group cursor-pointer hover:bg-gray-50 p-3 rounded-2xl transition-all border border-transparent hover:border-gray-100">
-                <div className="flex items-center">
-                  <div className="w-4 h-4 rounded-lg mr-4 shadow-sm" style={{ backgroundColor: COLORS[idx] }}></div>
-                  <span className="text-[11px] font-black text-gray-600 uppercase tracking-tight">{item.name}</span>
+            {isPieEmpty ? (
+                <div className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest">No Active Transaction Data</div>
+            ) : (
+                pieData.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center group cursor-pointer hover:bg-gray-50 p-3 rounded-2xl transition-all border border-transparent hover:border-gray-100">
+                    <div className="flex items-center">
+                    <div className="w-4 h-4 rounded-lg mr-4 shadow-sm" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></div>
+                    <span className="text-[11px] font-black text-gray-600 uppercase tracking-tight">{item.name}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                    <span className="text-[11px] font-black text-[#003366]">₹ {(item.value || 0).toLocaleString('en-IN')}</span>
+                    <span className="text-[8px] font-bold text-gray-300 uppercase">Settled</span>
+                    </div>
                 </div>
-                <div className="flex flex-col items-end">
-                   {/* Safety check for item.value */}
-                   <span className="text-[11px] font-black text-[#003366]">₹ {(item.value || 0).toLocaleString('en-IN')}</span>
-                   <span className="text-[8px] font-bold text-gray-300 uppercase">Settled</span>
-                </div>
-              </div>
-            ))}
+                ))
+            )}
           </div>
 
           <button className="mt-auto w-full py-4 bg-gray-50 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-[#003366] hover:bg-[#003366] hover:text-white transition-all">

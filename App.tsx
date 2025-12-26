@@ -339,7 +339,7 @@ const App: React.FC = () => {
     }
   };
 
-  // --- CLOSE FINANCIAL YEAR LOGIC (UPDATED: ARCHIVE ONLY) ---
+  // --- CLOSE FINANCIAL YEAR LOGIC (UPDATED: ARCHIVE ALL & CHUNK) ---
   const handleCloseFinancialYear = async () => {
     const confirmMsg = `CLOSE FINANCIAL YEAR & ARCHIVE DATA?\n\nThis action will:\n1. Move all current Invoices, Payments, and Tickets to the 'Archived' state.\n2. Your Admin Dashboard will be reset to ZERO.\n3. Clients will STILL see their history in the Client Portal.\n\nSAFE DATA:\n- Client Master Records will NOT be deleted.\n- Branch Configurations will NOT be deleted.\n\nAre you sure you want to proceed?`;
     
@@ -349,27 +349,40 @@ const App: React.FC = () => {
     setLoading(true);
     try {
         const collectionsToArchive = ['invoices', 'payments', 'notifications'];
-        const batch = writeBatch(db);
+        let batch = writeBatch(db);
         let opCount = 0;
+        let totalArchived = 0;
 
         for (const colName of collectionsToArchive) {
-             const q = query(collection(db, colName), where('archived', '!=', true)); 
-             const snapshot = await getDocs(q);
+             // Retrieve ALL documents to ensure even legacy ones without 'archived' field are processed
+             const snapshot = await getDocs(collection(db, colName));
+             
              snapshot.docs.forEach((docSnap) => {
-                 batch.update(docSnap.ref, { archived: true });
-                 opCount++;
+                 const data = docSnap.data();
+                 // Archive if it's not already archived (checks for false or undefined)
+                 if (data.archived !== true) {
+                     batch.update(docSnap.ref, { archived: true });
+                     opCount++;
+                     totalArchived++;
+                 }
+
+                 // Firestore Batch Limit is 500, chunk at 450 for safety
+                 if (opCount >= 450) {
+                     batch.commit();
+                     batch = writeBatch(db); // Start new batch
+                     opCount = 0;
+                 }
              });
         }
         
         if (opCount > 0) {
             await batch.commit();
-            alert("Financial Year Closed. Transactions archived. Admin Dashboard is now Zero. Client data preserved.");
-        } else {
-            alert("No active transactions found to archive.");
         }
+        
+        alert(`Financial Year Closed Successfully.\n${totalArchived} records have been archived. Dashboard is now Zero.`);
     } catch(e) {
         console.error(e);
-        alert("Error closing financial year.");
+        alert("Error closing financial year. Please check console for details.");
     } finally {
         setLoading(false);
     }
