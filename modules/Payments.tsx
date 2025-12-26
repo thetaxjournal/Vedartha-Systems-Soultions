@@ -127,7 +127,7 @@ const Payments: React.FC<PaymentsProps> = ({ invoices, payments, branches, onRec
             <img src={COMPANY_LOGO} alt="Logo" className="h-12 object-contain" />
           </div>
           <div className="w-1/3 text-center">
-            <h1 className="text-[20px] font-bold border-b-2 border-[#000000] inline-block leading-none pb-1">Payment receipt</h1>
+            <h1 className="text-[20px] font-bold inline-block leading-none pb-1">Payment receipt</h1>
           </div>
           <div className="w-1/3 text-right text-[10px] font-medium">
             <p className="mb-1">Receipt id: <span className="text-[12px] font-bold">{payment.id}</span></p>

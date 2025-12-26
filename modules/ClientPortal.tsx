@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import QRCode from 'react-qr-code';
 import { Invoice, Payment, Client, Branch, AppNotification } from '../types';
-import { LOGO_DARK_BG, COMPANY_NAME, INITIAL_BRANCHES, generateSecureQR, COMPANY_LOGO } from '../constants';
+import { LOGO_DARK_BG, COMPANY_NAME, INITIAL_BRANCHES, generateSecureQR, COMPANY_LOGO, APP_CONFIG } from '../constants';
 import Scanner from './Scanner';
 
 interface ClientPortalProps {
@@ -23,9 +23,39 @@ interface ClientPortalProps {
   onRevokeTicket: (ticketId: string) => Promise<void>;
 }
 
+const numberToWords = (num: number): string => {
+  if (num === 0) return 'Zero';
+  const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const convert = (n: number): string => {
+    if (n < 20) return a[n];
+    if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
+    if (n < 1000) return a[Math.floor(n / 100)] + ' hundred' + (n % 100 !== 0 ? ' and ' + convert(n % 100) : '');
+    return '';
+  };
+
+  let str = '';
+  const crores = Math.floor(num / 10000000);
+  num %= 10000000;
+  const lakhs = Math.floor(num / 100000);
+  num %= 100000;
+  const thousands = Math.floor(num / 1000);
+  num %= 1000;
+  const remaining = Math.floor(num);
+
+  if (crores > 0) str += convert(crores) + ' crore ';
+  if (lakhs > 0) str += convert(lakhs) + ' lakh ';
+  if (thousands > 0) str += convert(thousands) + ' thousand ';
+  if (remaining > 0) str += (str !== '' ? '' : '') + convert(remaining);
+
+  return 'Rupees ' + str.trim() + ' only';
+};
+
 const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices, payments, branches, notifications = [], onLogout, onSendMessage, onFeedback, onRevokeTicket }) => {
   const [activeTab, setActiveTab] = useState<'invoices' | 'payments' | 'scanner' | 'tickets'>('invoices');
   const [viewingReceipt, setViewingReceipt] = useState<Payment | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null); // New State for Invoice
   const [viewingTicket, setViewingTicket] = useState<AppNotification | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   
@@ -79,10 +109,15 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
   const effectiveTicketMode = myTickets.length === 0 && ticketMode === 'list' ? 'new' : ticketMode;
 
   const handlePrint = (shouldShareWhatsApp: boolean = false) => {
-    if (!viewingReceipt) return;
+    if (!viewingReceipt && !viewingInvoice) return;
 
     const originalTitle = document.title;
-    document.title = `${viewingReceipt.id}_Receipt`;
+    
+    if (viewingInvoice) {
+        document.title = `${viewingInvoice.invoiceNumber}_Tax_Invoice`;
+    } else if (viewingReceipt) {
+        document.title = `${viewingReceipt.id}_Receipt`;
+    }
     
     setIsPrinting(true);
     setTimeout(() => {
@@ -91,7 +126,12 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
       document.title = originalTitle;
 
       if (shouldShareWhatsApp) {
-         const text = `Dear Team,%0A%0AI have downloaded the Receipt *${viewingReceipt.id}* for Invoice ${viewingReceipt.invoiceNumber}.%0A%0A*Amount:* ₹ ${(viewingReceipt.amount || 0).toLocaleString('en-IN')}%0A%0AThanks.`;
+         let text = '';
+         if (viewingReceipt) {
+             text = `Dear Team,%0A%0AI have downloaded the Receipt *${viewingReceipt.id}* for Invoice ${viewingReceipt.invoiceNumber}.%0A%0A*Amount:* ₹ ${(viewingReceipt.amount || 0).toLocaleString('en-IN')}%0A%0AThanks.`;
+         } else if (viewingInvoice) {
+             text = `Dear Team,%0A%0AI have downloaded the Invoice *${viewingInvoice.invoiceNumber}*.%0A%0A*Amount:* ₹ ${(viewingInvoice.grandTotal || 0).toLocaleString('en-IN')}%0A%0AThanks.`;
+         }
          setTimeout(() => {
              window.open(`https://wa.me/?text=${text}`, '_blank');
          }, 1000);
@@ -160,6 +200,244 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
   const totalOutstanding = myInvoices.filter(i => i.status === 'Posted').reduce((acc, i) => acc + (i.grandTotal || 0), 0);
   const lastPayment = myPayments.length > 0 ? myPayments[0] : null;
 
+  const InvoiceDocument = ({ invoice }: { invoice: Invoice }) => {
+    const activeBranch = activeBranches.find(b => b.id === invoice.branchId) || activeBranches[0];
+    const selectedClient = clientData; // Use prop or invoice metadata if undefined
+
+    // Fallback if clientData is somehow undefined but invoice exists
+    const clientName = invoice.clientName;
+    const clientGstin = invoice.clientGstin;
+
+    const placeOfSupply = invoice.placeOfSupply || activeBranch.address.state;
+    const isInterState = activeBranch.address.state.trim().toLowerCase() !== placeOfSupply.trim().toLowerCase();
+
+    // Branch specific bank details
+    const bankName = activeBranch?.bankDetails?.bankName || APP_CONFIG.bankDetails?.bankName || 'N/A';
+    const bankAddress = activeBranch?.bankDetails?.branchName || APP_CONFIG.bankDetails?.branchName || 'N/A';
+    const bankAccount = activeBranch?.bankDetails?.accountNumber || APP_CONFIG.bankDetails?.accountNumber || 'N/A';
+    const bankIfsc = activeBranch?.bankDetails?.ifscCode || APP_CONFIG.bankDetails?.ifscCode || 'N/A';
+    
+    return (
+    <div className="flex flex-col text-[#000000]">
+      {/* PAGE 1: MAIN INVOICE (A4) */}
+      <div 
+        id="invoice-render-p1" 
+        className="bg-white w-[210mm] min-h-[297mm] p-[15mm] relative text-[#000000] font-sans overflow-hidden flex flex-col"
+        style={{ pageBreakAfter: 'always' }}
+      >
+        {/* Header Section */}
+        <div className="flex justify-between items-start mb-4 shrink-0">
+          <div className="flex flex-col">
+            <img src={COMPANY_LOGO} alt="Logo" className="h-[50px] object-contain mb-1" />
+          </div>
+          <div className="text-right text-[10px] leading-[1.3] text-[#000000] max-w-[340px] font-medium">
+            <p className="font-bold">{activeBranch?.name}</p>
+            <p>{activeBranch?.address.line1}, {activeBranch?.address.line2}</p>
+            <p>{activeBranch?.address.city} - {activeBranch?.address.pincode}</p>
+            <p>{activeBranch?.address.state}, India</p>
+            <p className="mt-1">Tel : {activeBranch?.contact}</p>
+          </div>
+        </div>
+
+        <div className="border-b-[1.5px] border-[#000000] mb-3 pb-1 shrink-0">
+          <h1 className="text-[16px] font-bold tracking-tight">Tax invoice - Original for recipient</h1>
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-12 mb-8 text-[11px] leading-[1.4] shrink-0">
+          <div className="space-y-[2px]">
+            <div className="flex items-start"><span className="w-32 font-bold shrink-0">Invoice no.</span><span className="w-4 shrink-0 text-center">:</span><span className="font-bold">{invoice.invoiceNumber}</span></div>
+            <div className="flex items-start pt-2"><span className="w-32 font-bold shrink-0">Kind attn.</span><span className="w-4 shrink-0 text-center">:</span><span className="font-medium">{invoice.kindAttn}</span></div>
+            <div className="flex items-start pt-1">
+              <span className="w-32 font-bold shrink-0">Mailing address</span>
+              <span className="w-4 shrink-0 text-center">:</span>
+              <div className="flex-1 font-medium leading-[1.3]">
+                {clientName}<br/>
+                {selectedClient?.billingAddress.line1 || 'Address on file'}, {selectedClient?.billingAddress.line2},<br/>
+                {selectedClient?.billingAddress.city} {selectedClient?.billingAddress.pincode}, {selectedClient?.billingAddress.state}, India.
+              </div>
+            </div>
+          </div>
+          <div className="space-y-[2px]">
+            <div className="flex items-start"><span className="w-32 font-bold shrink-0">Date</span><span className="w-4 shrink-0 text-center">:</span><span className="font-medium">{new Date(invoice.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+            <div className="flex items-start pt-2"><span className="w-32 font-bold shrink-0">Client name</span><span className="w-4 shrink-0 text-center">:</span><span className="font-bold">{clientName}</span></div>
+            <div className="flex items-start pt-1">
+              <span className="w-32 font-bold shrink-0">Address</span>
+              <span className="w-4 shrink-0 text-center">:</span>
+              <div className="flex-1 font-medium leading-[1.3]">
+                 {selectedClient?.billingAddress.line1 || 'Address on file'}, {selectedClient?.billingAddress.line2},<br/>
+                 {selectedClient?.billingAddress.city} {selectedClient?.billingAddress.pincode}, {selectedClient?.billingAddress.state}, India.
+              </div>
+            </div>
+            <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Place of supply</span><span className="w-4 shrink-0 text-center">:</span><span>{placeOfSupply}</span></div>
+            <div className="flex items-start pt-1"><span className="w-32 font-bold shrink-0">Gstin/Unique id</span><span className="w-4 shrink-0 text-center">:</span><span className="font-bold tracking-tight">{clientGstin}</span></div>
+          </div>
+        </div>
+
+        <div className="border-t-[1.5px] border-b-[1.5px] border-[#000000] shrink-0 mt-2">
+          <table className="w-full text-[11px] border-collapse">
+            <thead>
+              <tr className="border-b border-[#000000] font-bold text-[#000000]">
+                <th className="text-left py-1.5 pl-1 font-bold">Particulars</th>
+                <th className="text-right py-1.5 pr-1 w-40 font-bold">Amount (Inr)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.items.map((item, i) => (
+                <tr key={i} className="align-top border-b border-black/10 last:border-0 text-[#000000]">
+                  <td className="py-3 pl-1 pr-6 whitespace-pre-wrap leading-relaxed font-medium">
+                    <div className="flex items-start">
+                      <span className="w-8 shrink-0">{i+1}.</span>
+                      <div className="flex-1">{item.description}</div>
+                    </div>
+                  </td>
+                  <td className="py-3 text-right pr-1 font-bold">{(item.rate * item.quantity).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex justify-end mt-4 text-[11px] shrink-0 text-[#000000]">
+          <div className="w-72 space-y-1">
+            <div className="flex justify-between items-center"><span className="font-bold">Amount</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.subTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            
+            {isInterState ? (
+                <div className="flex justify-between items-center"><span className="font-bold">IGST @ 18.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{(invoice.taxAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+            ) : (
+                <>
+                    <div className="flex justify-between items-center"><span className="font-bold">CGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{((invoice.taxAmount || 0)/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                    <div className="flex justify-between items-center"><span className="font-bold">SGST @ 9.00 %</span><span className="w-36 flex justify-between"><span>:</span><span>{((invoice.taxAmount || 0)/2).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span></div>
+                </>
+            )}
+
+            <div className="h-[1px] bg-[#000000] my-1"></div>
+            <div className="flex justify-between font-bold text-[14px]">
+              <span className="font-bold">Gross amount</span>
+              <span className="w-36 flex justify-between">
+                <span>:</span>
+                <span className="font-bold">{(invoice.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </span>
+            </div>
+            <div className="h-[0.5px] bg-[#000000] mt-0.5"></div>
+          </div>
+        </div>
+
+        <div className="mt-4 text-[11px] font-bold text-[#000000] shrink-0">
+          {numberToWords(invoice.grandTotal || 0)}
+        </div>
+
+        <div className="mt-6 border-t-[1.5px] border-b-[1.5px] border-[#000000] py-3 grid grid-cols-2 gap-x-12 text-[10px] leading-[1.4] text-[#000000] shrink-0">
+          <div className="space-y-1">
+            <div className="flex"><span className="w-36 font-bold">Pan number</span><span className="w-4 text-center">:</span><span className="font-bold">{activeBranch?.pan}</span></div>
+            <div className="flex"><span className="w-36 font-bold align-top">Hsn code & description</span><span className="w-4 text-center align-top">:</span>
+              <span className="flex-1 font-medium leading-tight">{invoice.items[0]?.hsnCode}</span>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex"><span className="w-44 font-bold">Gstin of supplier</span><span className="w-4 text-center">:</span><span className="font-bold">{activeBranch?.gstin}</span></div>
+            <div className="flex"><span className="w-44 font-bold align-top">Principal place of business</span><span className="w-4 text-center align-top">:</span>
+              <div className="flex-1 font-medium leading-tight">
+                {activeBranch?.address.line1}, {activeBranch?.address.city} Urban, {activeBranch?.address.state} - {activeBranch?.address.pincode}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto flex flex-col pt-8">
+          <div className="flex justify-between items-end mb-6">
+            <div className="shrink-0">
+              <QRCode 
+                value={generateSecureQR({
+                    type: 'INV',
+                    id: invoice.id,
+                    invoiceNumber: invoice.invoiceNumber,
+                    clientName: clientName,
+                    clientGstin: clientGstin,
+                    date: invoice.date,
+                    grandTotal: invoice.grandTotal,
+                    items: invoice.items,
+                    status: invoice.status
+                })} 
+                size={160} 
+                level="M" 
+                fgColor="#000000" 
+              />
+            </div>
+
+            <div className="text-right flex flex-col items-end">
+              <p className="text-[10px] font-bold text-[#000000] mb-1">For Vedartha International Limited</p>
+              <div className="text-right space-y-1">
+                 <div className="relative w-64 h-16 border-b border-dotted border-[#000000]"></div>
+                 <div className="pt-2">
+                   <p className="text-[11px] font-bold">Authorized signatory</p>
+                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1 pt-4 border-t border-black/10 text-[#000000]">
+            <div className="text-[9px] font-medium leading-tight opacity-70">
+              <p>Branch office: {activeBranch?.address.line1}, {activeBranch?.address.city}, {activeBranch?.address.state} - {activeBranch?.address.pincode}</p>
+              <p className="italic text-[8.5px] mt-1">{activeBranch?.name} is part of Vedartha International Limited Group.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* PAGE 2 */}
+      <div 
+        id="invoice-render-p2" 
+        className="bg-white w-[210mm] min-h-[297mm] p-[15mm] relative text-[#000000] font-sans overflow-hidden flex flex-col"
+        style={{ pageBreakBefore: 'always' }}
+      >
+        <div className="flex justify-between items-start mb-8 shrink-0">
+          <div className="flex flex-col">
+            <img src={COMPANY_LOGO} alt="Logo" className="h-[50px] object-contain mb-1" />
+          </div>
+          <div className="text-right text-[10px] leading-[1.3] text-[#000000] max-w-[340px] font-medium">
+            <p className="font-bold">{activeBranch?.name}</p>
+            <p>{activeBranch?.address.line1}</p>
+            <p>{activeBranch?.address.city} - {activeBranch?.address.pincode}</p>
+          </div>
+        </div>
+
+        <div className="border-b-[1.5px] border-[#000000] mb-4 pb-1 shrink-0">
+          <h1 className="text-[16px] font-bold tracking-tight">Tax invoice - Terms & conditions</h1>
+        </div>
+
+        <div className="border border-[#000000] p-3 grid grid-cols-2 text-[11px] font-bold mb-10 text-[#000000]">
+          <div className="flex"><span className="w-24">Invoice no.</span><span className="px-2">:</span><span>{invoice.invoiceNumber}</span></div>
+          <div className="flex"><span className="w-24">Date</span><span className="px-2">:</span><span>{new Date(invoice.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+        </div>
+
+        <div className="space-y-6 text-[11px] leading-[1.7] text-[#000000] text-justify">
+          <p>
+            a) This bill is payable by electronic transfer/ dd/ cheque in favor of <span className="font-bold">{activeBranch?.name}</span>. Please make payment within 15 days of receipt of this invoice.
+          </p>
+          <div className="space-y-1">
+            <p>b) Bank details : <span className="font-bold">{bankName}, {bankAddress}</span></p>
+            <p className="font-bold border-l-2 border-[#000000] pl-4 py-2 mt-2 bg-gray-50/50">
+              Account number: {bankAccount}, Rtgs ifsc code: {bankIfsc}
+            </p>
+          </div>
+          <p>
+            c) For payment made by electronic fund transfer, please send details to <span className="font-bold underline">receipt@vedartha.com</span> quoting invoice number <span className="font-bold">{invoice.invoiceNumber}</span>.
+          </p>
+        </div>
+
+        <div className="mt-auto flex flex-col pt-6 border-t border-black/10">
+          <div className="text-[9px] font-medium opacity-70">
+             <p>Branch office: {activeBranch?.address.line1}, {activeBranch?.address.city}, {activeBranch?.address.state} - {activeBranch?.address.pincode}</p>
+          </div>
+          <div className="flex justify-end mt-2">
+            <span className="text-[10px] font-medium">Page 2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    );
+  };
+
   const TicketDocument = ({ ticket }: { ticket: AppNotification }) => {
       return (
         <div className="bg-white w-[210mm] min-h-[297mm] p-[20mm] text-[#000000] font-sans flex flex-col relative print:p-[15mm]">
@@ -169,7 +447,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                     <img src={COMPANY_LOGO} alt="Logo" className="h-14 object-contain" />
                 </div>
                 <div className="w-1/3 text-center">
-                    <h1 className="text-[20px] font-bold border-b-2 border-[#000000] inline-block leading-none pb-1">Support Ticket</h1>
+                    <h1 className="text-[20px] font-bold inline-block leading-none pb-1">Support Ticket</h1>
                 </div>
                 <div className="w-1/3 text-right text-[10px] font-medium">
                     <p className="mb-1">Ticket #: <span className="text-[14px] font-bold">{ticket.ticketNumber}</span></p>
@@ -267,7 +545,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
             <img src={LOGO_DARK_BG} alt="Logo" className="h-14 object-contain invert brightness-0" />
           </div>
           <div className="w-1/3 text-center">
-            <h1 className="text-[20px] font-bold border-b-2 border-[#000000] inline-block leading-none pb-1">Payment receipt</h1>
+            <h1 className="text-[20px] font-bold inline-block leading-none pb-1">Payment receipt</h1>
           </div>
           <div className="w-1/3 text-right text-[10px] font-medium">
             <p className="mb-1">Receipt id: <span className="text-[12px] font-bold">{payment.id}</span></p>
@@ -383,6 +661,7 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
     <div className="min-h-screen bg-[#f3f4f7] font-sans">
       {/* Hidden Portal for Print */}
       {isPrinting && viewingReceipt && createPortal(<ReceiptDocument payment={viewingReceipt} />, document.getElementById('print-portal')!)}
+      {isPrinting && viewingInvoice && createPortal(<InvoiceDocument invoice={viewingInvoice} />, document.getElementById('print-portal')!)}
       {isPrinting && viewingTicket && createPortal(<TicketDocument ticket={viewingTicket} />, document.getElementById('print-portal')!)}
 
       {/* Client Header */}
@@ -490,8 +769,14 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
                                     <p className="text-[10px] font-bold text-gray-400 uppercase">Amount</p>
                                     <p className="text-lg font-black text-gray-900">₹ {(inv.grandTotal || 0).toLocaleString('en-IN')}</p>
                                  </div>
-                                 <div className="flex items-center text-gray-500 font-bold text-xs bg-gray-50 px-3 py-1.5 rounded-lg">
-                                    {inv.status}
+                                 <div className="flex space-x-2">
+                                     <button 
+                                        onClick={() => setViewingInvoice(inv)}
+                                        className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition-colors"
+                                        title="Download Invoice PDF"
+                                     >
+                                        <Download size={20} />
+                                     </button>
                                  </div>
                               </div>
                            </div>
@@ -787,6 +1072,28 @@ const ClientPortal: React.FC<ClientPortalProps> = ({ user, clientData, invoices,
             </div>
             <div className="shadow-2xl">
               <ReceiptDocument payment={viewingReceipt} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingInvoice && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-8 backdrop-blur-sm no-print">
+          <div className="flex flex-col items-center space-y-4 max-h-screen overflow-y-auto w-full py-10">
+            <div className="flex space-x-4 mb-4 bg-white/10 p-4 rounded-3xl border border-white/10 backdrop-blur-md sticky top-0">
+               {/* WhatsApp Button */}
+               <button onClick={() => handlePrint(true)} className="flex items-center px-6 py-3 bg-green-600 text-white rounded-xl text-[11px] font-bold shadow-2xl transition-all hover:bg-green-500">
+                 <MessageCircle size={18} className="mr-3" /> WhatsApp
+               </button>
+              <button onClick={() => handlePrint(false)} className="flex items-center px-8 py-3 bg-[#0854a0] text-white rounded-xl text-[11px] font-bold shadow-2xl transition-all">
+                <Printer size={18} className="mr-3" /> Execute print (A4 black)
+              </button>
+              <button onClick={() => setViewingInvoice(null)} className="flex items-center px-6 py-3 bg-white text-gray-800 rounded-xl text-[11px] font-bold shadow-2xl transition-all">
+                <X size={18} className="mr-3" /> Exit
+              </button>
+            </div>
+            <div className="shadow-2xl origin-top transform transition-transform duration-300 scale-90">
+              <InvoiceDocument invoice={viewingInvoice} />
             </div>
           </div>
         </div>

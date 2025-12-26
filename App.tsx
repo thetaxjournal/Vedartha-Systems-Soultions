@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Module, Branch, Client, Invoice, Payment, UserProfile, AppNotification, UserRole } from './types';
 import { INITIAL_BRANCHES, INITIAL_CLIENTS } from './constants';
 import Sidebar from './components/Sidebar';
@@ -31,7 +31,8 @@ import {
   orderBy,
   getDoc,
   deleteDoc,
-  getDocs
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 
 const App: React.FC = () => {
@@ -177,6 +178,13 @@ const App: React.FC = () => {
       await setDoc(doc(db, 'clients', c.id), c);
     });
   };
+  
+  // NEW: Handle Client Deletion
+  const handleDeleteClient = async (clientId: string) => {
+      if(confirm('Are you sure you want to permanently delete this client? This cannot be undone.')) {
+          await deleteDoc(doc(db, 'clients', clientId));
+      }
+  };
 
   const handleUpdateBranches = (newBranches: Branch[]) => {
     newBranches.forEach(async (b) => {
@@ -234,7 +242,8 @@ const App: React.FC = () => {
           ticketNumber: generatedTicketNumber,
           subject,
           message,
-          status: 'Open'
+          status: 'Open',
+          archived: false
       };
       
       await addDoc(collection(db, 'notifications'), newNotification);
@@ -330,28 +339,34 @@ const App: React.FC = () => {
     }
   };
 
-  // --- CLOSE FINANCIAL YEAR LOGIC ---
+  // --- CLOSE FINANCIAL YEAR LOGIC (UPDATED: ARCHIVE ONLY) ---
   const handleCloseFinancialYear = async () => {
-    const confirmMsg = `CLOSE FINANCIAL YEAR & RESET PORTAL?\n\nThis action will:\n1. PERMANENTLY DELETE ALL Invoices, Payments, and Tickets.\n2. Reset all dashboard counters to ZERO.\n\nSAFE DATA:\n- Client Master Records will NOT be deleted.\n- Branch Configurations will NOT be deleted.\n\nAre you sure you want to proceed?`;
+    const confirmMsg = `CLOSE FINANCIAL YEAR & ARCHIVE DATA?\n\nThis action will:\n1. Move all current Invoices, Payments, and Tickets to the 'Archived' state.\n2. Your Admin Dashboard will be reset to ZERO.\n3. Clients will STILL see their history in the Client Portal.\n\nSAFE DATA:\n- Client Master Records will NOT be deleted.\n- Branch Configurations will NOT be deleted.\n\nAre you sure you want to proceed?`;
     
     if (!confirm(confirmMsg)) return;
-    if (!confirm("Double Check: Have you downloaded your Backup/Reports? This cannot be undone.")) return;
+    if (!confirm("Double Check: Have you downloaded your Backup/Reports?")) return;
 
     setLoading(true);
     try {
-        // Collections to clean (Transactions only)
-        // STRICTLY EXCLUDING 'clients' and 'branches' and 'users' to prevent master data loss
-        const collectionsToReset = ['invoices', 'payments', 'notifications'];
+        const collectionsToArchive = ['invoices', 'payments', 'notifications'];
+        const batch = writeBatch(db);
+        let opCount = 0;
 
-        for (const colName of collectionsToReset) {
-             // Query all docs in the collection to ensure a full reset to "Zero"
-             const q = query(collection(db, colName)); 
+        for (const colName of collectionsToArchive) {
+             const q = query(collection(db, colName), where('archived', '!=', true)); 
              const snapshot = await getDocs(q);
-             const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-             await Promise.all(deletePromises);
+             snapshot.docs.forEach((docSnap) => {
+                 batch.update(docSnap.ref, { archived: true });
+                 opCount++;
+             });
         }
         
-        alert("Financial Year Closed. Transaction data wiped. Dashboard is now Zero. Client Master and Branches preserved.");
+        if (opCount > 0) {
+            await batch.commit();
+            alert("Financial Year Closed. Transactions archived. Admin Dashboard is now Zero. Client data preserved.");
+        } else {
+            alert("No active transactions found to archive.");
+        }
     } catch(e) {
         console.error(e);
         alert("Error closing financial year.");
@@ -359,6 +374,11 @@ const App: React.FC = () => {
         setLoading(false);
     }
   };
+
+  // --- FILTERED DATA FOR ADMIN (Exclude Archived) ---
+  const activeInvoices = useMemo(() => invoices.filter(i => !i.archived), [invoices]);
+  const activePayments = useMemo(() => payments.filter(p => !p.archived), [payments]);
+  const activeNotifications = useMemo(() => notifications.filter(n => !n.archived), [notifications]);
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600 font-bold animate-pulse">Loading Cloud Resources...</div>;
 
@@ -373,10 +393,10 @@ const App: React.FC = () => {
       <ClientPortal 
          user={user}
          clientData={currentClient}
-         invoices={invoices}
-         payments={payments}
+         invoices={invoices} // Pass ALL invoices (history preserved)
+         payments={payments} // Pass ALL payments (history preserved)
          branches={branches}
-         notifications={notifications.filter(n => n.clientId === user.clientId)} // Pass client tickets
+         notifications={notifications.filter(n => n.clientId === user.clientId)} // Pass all tickets for client
          onLogout={handleLogout}
          onSendMessage={handleClientMessage}
          onFeedback={handleTicketFeedback}
@@ -386,18 +406,16 @@ const App: React.FC = () => {
   }
   // -----------------------------
 
-  // --- FILTER DATA FOR BRANCH MANAGERS ---
+  // --- FILTER DATA FOR BRANCH MANAGERS (Admin Side) ---
   const isBranchManager = userProfile?.role === UserRole.BRANCH_MANAGER;
-  // If Branch Manager, limit to their allowed branches (mock logic uses allowedBranchIds)
-  // For admin, show all.
   const allowedBranches = isBranchManager && userProfile?.allowedBranchIds 
     ? branches.filter(b => userProfile.allowedBranchIds.includes(b.id)) 
     : branches;
 
   // Filter Notifications for Branch Manager
   const filteredNotifications = isBranchManager 
-     ? notifications.filter(n => userProfile?.allowedBranchIds.includes(n.branchId))
-     : notifications;
+     ? activeNotifications.filter(n => userProfile?.allowedBranchIds.includes(n.branchId))
+     : activeNotifications;
   // ---------------------------------------
 
   const renderModule = () => {
@@ -405,10 +423,10 @@ const App: React.FC = () => {
       case 'Dashboard':
         return (
           <Dashboard 
-            invoices={invoices} 
+            invoices={activeInvoices} // Admin sees only active year
             clients={clients} 
             branches={allowedBranches} 
-            payments={payments}
+            payments={activePayments}
             onRecordPayment={handleRecordPayment}
           />
         );
@@ -438,7 +456,7 @@ const App: React.FC = () => {
         }
         return (
           <InvoiceList 
-            invoices={invoices} 
+            invoices={activeInvoices} // Admin sees only active year
             clients={clients}
             branches={allowedBranches}
             onNewInvoice={() => {
@@ -452,40 +470,40 @@ const App: React.FC = () => {
       case 'Payments':
         return (
           <Payments 
-            invoices={invoices} 
-            payments={payments} 
+            invoices={activeInvoices} 
+            payments={activePayments} 
             branches={allowedBranches}
             onRecordPayment={handleRecordPayment} 
           />
         );
       case 'Clients':
-        return <Clients clients={clients} setClients={handleUpdateClients} branches={allowedBranches} />;
+        return <Clients clients={clients} setClients={handleUpdateClients} branches={allowedBranches} onDeleteClient={handleDeleteClient} />;
       case 'Branches':
         // Only Admin can access, Sidebar should hide it but double check
         if (isBranchManager) return <div>Access Denied</div>;
         return <Branches branches={branches} setBranches={handleUpdateBranches} />;
       case 'Accounts':
-        return <Accounts invoices={invoices} payments={payments} clients={clients} />;
+        return <Accounts invoices={activeInvoices} payments={activePayments} clients={clients} />;
       case 'Scanner':
-        return <Scanner invoices={invoices} payments={payments} />;
+        return <Scanner invoices={activeInvoices} payments={activePayments} />;
       case 'Settings':
         if (isBranchManager) return <div>Access Denied</div>;
         return (
           <Settings 
-            state={{ invoices, clients, branches, payments, notifications }} // Included notifications in state
+            state={{ invoices, clients, branches, payments, notifications }} // Backup everything, including archived
             onAddUser={handleAddUser}
             onPurgeData={handlePurgeSystem}
             onCloseFinancialYear={handleCloseFinancialYear}
-            onRestoreData={handleRestoreSystem} // Pass restore handler
+            onRestoreData={handleRestoreSystem} 
           />
         );
       default:
         return (
           <Dashboard 
-            invoices={invoices} 
+            invoices={activeInvoices} 
             clients={clients} 
             branches={allowedBranches} 
-            payments={payments}
+            payments={activePayments}
             onRecordPayment={handleRecordPayment}
           />
         );

@@ -8,9 +8,10 @@ interface ClientsProps {
   clients: Client[];
   setClients: (clients: Client[]) => void;
   branches: Branch[];
+  onDeleteClient?: (id: string) => void; // New Prop
 }
 
-const Clients: React.FC<ClientsProps> = ({ clients, setClients, branches }) => {
+const Clients: React.FC<ClientsProps> = ({ clients, setClients, branches, onDeleteClient }) => {
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -128,12 +129,22 @@ const Clients: React.FC<ClientsProps> = ({ clients, setClients, branches }) => {
                   </span>
                 </td>
                 <td className="px-10 py-6 text-right">
-                  <button 
-                    onClick={() => handleEditClient(client)} 
-                    className="p-3 hover:bg-blue-600 hover:text-white rounded-xl transition-all text-gray-400"
-                  >
-                    <Edit2 size={18} />
-                  </button>
+                  <div className="flex justify-end space-x-2">
+                      <button 
+                        onClick={() => handleEditClient(client)} 
+                        className="p-3 hover:bg-blue-600 hover:text-white rounded-xl transition-all text-gray-400"
+                        title="Edit Details"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={() => onDeleteClient && onDeleteClient(client.id)}
+                        className="p-3 hover:bg-rose-500 hover:text-white rounded-xl transition-all text-gray-300 hover:shadow-lg"
+                        title="Delete Client"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                  </div>
                 </td>
               </tr>
             ))}

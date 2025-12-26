@@ -42,7 +42,7 @@ const Notifications: React.FC<NotificationsProps> = ({ notifications, onCloseTic
                     <img src={COMPANY_LOGO} alt="Logo" className="h-14 object-contain" />
                 </div>
                 <div className="w-1/3 text-center">
-                    <h1 className="text-[20px] font-bold border-b-2 border-[#000000] inline-block leading-none pb-1">Support Ticket</h1>
+                    <h1 className="text-[20px] font-bold inline-block leading-none pb-1">Support Ticket</h1>
                 </div>
                 <div className="w-1/3 text-right text-[10px] font-medium">
                     <p className="mb-1">Ticket #: <span className="text-[14px] font-bold">{ticket.ticketNumber}</span></p>

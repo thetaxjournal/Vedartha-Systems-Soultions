@@ -225,7 +225,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
                   </div>
                   <h4 className="text-sm font-black text-gray-800 uppercase tracking-tighter">Close Financial Year</h4>
                   <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                    Wipes all Invoices, Payments, and Tickets to start fresh. Keeps Client Master & Branches intact.
+                    Archives all transactions (Invoices, Receipts). Resets dashboard to zero. Client Portal retains history.
                   </p>
                   <button 
                     onClick={onCloseFinancialYear}

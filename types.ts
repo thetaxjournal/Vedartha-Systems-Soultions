@@ -90,6 +90,7 @@ export interface Invoice {
   taxAmount: number;
   grandTotal: number;
   status: 'Draft' | 'Posted' | 'Paid' | 'Cancelled';
+  archived?: boolean; // New: For Financial Year Close
 }
 
 export interface Payment {
@@ -101,6 +102,7 @@ export interface Payment {
   date: string;
   method: 'Bank Transfer' | 'Cash' | 'Cheque' | 'Online Gateway';
   reference: string;
+  archived?: boolean; // New: For Financial Year Close
 }
 
 export interface Transaction {
@@ -127,6 +129,7 @@ export interface AppNotification {
   feedback?: string; // Client feedback text
   adminResponse?: string; // New: Admin Reply
   responseDate?: string; // New: Date of reply
+  archived?: boolean; // New: For Financial Year Close
 }
 
 export type Module = 'Dashboard' | 'Invoices' | 'Payments' | 'Clients' | 'Branches' | 'Accounts' | 'Settings' | 'Scanner' | 'Notifications';
