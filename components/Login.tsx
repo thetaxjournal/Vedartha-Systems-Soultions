@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Lock, User, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
 import { COMPANY_LOGO } from '../constants';
@@ -21,14 +20,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+    
     try {
-        // Check if input is an email (contains @)
-        if (email.includes('@')) {
-           // Standard Admin/Staff Login via Firebase Auth
-           const userCredential = await signInWithEmailAndPassword(auth, email, password);
-           onLogin(userCredential.user);
-        } else {
-           // Client Login using Client ID
+        // STRATEGY 1: Check Client Portal Login (Client ID based)
+        // If input does not look like an email, assume it's a Client ID.
+        if (!email.includes('@')) {
            const clientsRef = collection(db, 'clients');
            const q = query(clientsRef, where('id', '==', email), where('portalPassword', '==', password));
            const querySnapshot = await getDocs(q);
@@ -36,28 +32,56 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
            if (!querySnapshot.empty) {
               const clientData = querySnapshot.docs[0].data();
               if (clientData.portalAccess) {
-                 // Create a synthetic user object for the client
                  const syntheticUser = {
                     uid: clientData.id,
                     email: clientData.email,
                     displayName: clientData.name,
                     role: UserRole.CLIENT,
                     clientId: clientData.id,
-                    isClient: true // Flag to identify client in App.tsx
+                    isClient: true
                  };
                  onLogin(syntheticUser);
+                 return; // Success
               } else {
-                 setError('Portal access is disabled for this client.');
+                 throw new Error('Portal access is disabled for this client.');
               }
            } else {
-              setError('Invalid Client ID or Password.');
+              throw new Error('Invalid Client ID or Password.');
            }
         }
+
+        // STRATEGY 2: Check Custom Staff Users (Stored in Firestore 'users' collection)
+        // This is for users created via the "Settings" tab in this app.
+        const usersRef = collection(db, 'users');
+        const userQ = query(usersRef, where('email', '==', email), where('password', '==', password));
+        const userSnapshot = await getDocs(userQ);
+
+        if (!userSnapshot.empty) {
+            const userData = userSnapshot.docs[0].data();
+            const syntheticStaff = {
+                uid: userSnapshot.docs[0].id,
+                email: userData.email,
+                displayName: userData.displayName,
+                role: userData.role,
+                allowedBranchIds: userData.allowedBranchIds || [],
+                isStaff: true // Flag to identify staff in App.tsx
+            };
+            onLogin(syntheticStaff);
+            return; // Success
+        }
+
+        // STRATEGY 3: Fallback to Firebase Auth (Legacy/Root Admin)
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        onLogin(userCredential.user);
+
     } catch (err: any) {
       console.error(err);
       let msg = 'Authentication failed.';
-      if (err.code === 'auth/invalid-credential') msg = 'Invalid credentials.';
-      if (err.code === 'auth/too-many-requests') msg = 'Too many failed attempts. Try later.';
+      if (typeof err === 'string') msg = err;
+      else if (err.message) msg = err.message;
+      else if (err.code === 'auth/invalid-credential') msg = 'Invalid credentials.';
+      else if (err.code === 'auth/too-many-requests') msg = 'Too many failed attempts. Try later.';
+      
       setError(msg);
     } finally {
       setLoading(false);
@@ -101,7 +125,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full h-14 bg-gray-50 border-2 border-transparent focus:border-[#0854a0] focus:bg-white rounded-2xl pl-14 pr-6 text-sm font-bold transition-all outline-none"
-                  placeholder="ID / Username"
+                  placeholder="Login ID / Email"
                   required
                 />
               </div>

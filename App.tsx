@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Module, Branch, Client, Invoice, Payment, UserProfile, AppNotification, UserRole } from './types';
 import { INITIAL_BRANCHES, INITIAL_CLIENTS } from './constants';
@@ -53,40 +52,31 @@ const App: React.FC = () => {
   const [showCreation, setShowCreation] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
 
-  // Auth Listener
+  // Auth Listener (Only for Firebase Auth users, Custom users handled in handleLogin)
   useEffect(() => {
     // Standard Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // Only set user if it's not a synthetic client login (which is handled manually in Login.tsx)
       if (currentUser) {
         setUser(currentUser);
-        // Fetch User Profile Role
-        try {
-           // In a real app, you would fetch this from 'users' collection using currentUser.uid
-           // For this demo, if email is admin@vedartha.com, grant ADMIN, else BRANCH_MANAGER
-           // Assuming we might have stored it in Firestore 'users' collection:
-           const userQuery = query(collection(db, 'users'), where('email', '==', currentUser.email));
-           // For simplicity in this demo structure without full user management implementation:
-           const isAdmin = currentUser.email?.includes('admin');
-           const mockProfile: UserProfile = {
-              uid: currentUser.uid,
-              email: currentUser.email || '',
-              displayName: currentUser.displayName || 'User',
-              role: isAdmin ? UserRole.ADMIN : UserRole.BRANCH_MANAGER,
-              allowedBranchIds: isAdmin ? [] : ['B001'] // Mock: Admin sees all, Manager sees B001
-           };
-           setUserProfile(mockProfile);
-        } catch (e) {
-           console.error("Error fetching user profile", e);
-        }
-      } else if (!user?.isClient) {
-        setUser(null);
-        setUserProfile(null);
+        // Default Admin Role for Firebase Auth Users
+        const mockProfile: UserProfile = {
+            uid: currentUser.uid,
+            email: currentUser.email || '',
+            displayName: currentUser.displayName || 'Administrator',
+            role: UserRole.ADMIN, // Firebase Auth logins are implicitly Admins in this setup
+            allowedBranchIds: [] 
+        };
+        setUserProfile(mockProfile);
+      } else {
+        // If not Firebase Auth, check if we have a manually set user (Custom Staff/Client)
+        // If user is null but we set it manually in handleLogin, don't reset unless explicitly logging out
+        // The onAuthStateChanged might fire with null on load if not persisted
+        // We handle persistence manually or rely on session
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []); // Remove user dependency to avoid loop, we handle it logically
+  }, []); 
 
   // Data Listeners (Firestore)
   useEffect(() => {
@@ -132,12 +122,12 @@ const App: React.FC = () => {
       setPayments(sorted);
     });
     
-    // Notifications Listener (New)
+    // Notifications Listener
     const unsubNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
         const sorted = snapshot.docs.map(doc => ({...doc.data(), id: doc.id} as AppNotification)).sort((a,b) => {
             const dateA = new Date(a.date).getTime();
             const dateB = new Date(b.date).getTime();
-            return dateB - dateA; // Date includes time, usually sufficient
+            return dateB - dateA; 
         });
         setNotifications(sorted);
     });
@@ -153,7 +143,7 @@ const App: React.FC = () => {
 
   const handleLogin = (userObj: any) => {
     setUser(userObj);
-    // For Synthetic Client Login
+    
     if (userObj.isClient) {
         setUserProfile({
             uid: userObj.uid,
@@ -163,7 +153,17 @@ const App: React.FC = () => {
             allowedBranchIds: [],
             clientId: userObj.clientId
         });
+    } else if (userObj.isStaff) {
+        // Handle Custom Staff Login
+        setUserProfile({
+            uid: userObj.uid,
+            email: userObj.email,
+            displayName: userObj.displayName,
+            role: userObj.role,
+            allowedBranchIds: userObj.allowedBranchIds || []
+        });
     }
+    // Note: Firebase Auth users are handled in useEffect
   };
 
   const handleLogout = () => {
@@ -179,7 +179,6 @@ const App: React.FC = () => {
     });
   };
   
-  // NEW: Handle Client Deletion
   const handleDeleteClient = async (clientId: string) => {
       if(confirm('Are you sure you want to permanently delete this client? This cannot be undone.')) {
           await deleteDoc(doc(db, 'clients', clientId));
@@ -223,16 +222,14 @@ const App: React.FC = () => {
   };
 
   const handleAddUser = async (userProfile: Omit<UserProfile, 'uid'>) => {
+    // Add to 'users' collection for custom auth
     await addDoc(collection(db, 'users'), userProfile);
   };
   
-  // Send Notification to Admin/Branch (Raise Ticket)
   const handleClientMessage = async (subject: string, message: string, generatedTicketNumber: string) => {
       if(!user?.isClient) return;
-      
-      // Find Client Branch ID to route notification
       const currentClient = clients.find(c => c.id === user.clientId);
-      const targetBranchId = currentClient?.branchIds[0] || 'B001'; // Default or first branch
+      const targetBranchId = currentClient?.branchIds[0] || 'B001'; 
 
       const newNotification: Omit<AppNotification, 'id'> = {
           date: new Date().toISOString(),
@@ -249,28 +246,24 @@ const App: React.FC = () => {
       await addDoc(collection(db, 'notifications'), newNotification);
   };
 
-  // Close Ticket (Admin)
   const handleCloseTicket = async (ticketId: string) => {
       await updateDoc(doc(db, 'notifications', ticketId), { status: 'Closed' });
   };
 
-  // Reply to Ticket (Admin)
   const handleReplyTicket = async (ticketId: string, response: string) => {
       await updateDoc(doc(db, 'notifications', ticketId), { 
           adminResponse: response,
           responseDate: new Date().toISOString(),
-          status: 'Closed' // Automatically close on reply to streamline workflow
+          status: 'Closed' 
       });
   };
 
-  // Revoke Ticket (Client)
   const handleRevokeTicket = async (ticketId: string) => {
       if (confirm('Are you sure you want to revoke this ticket? This action cannot be undone.')) {
           await updateDoc(doc(db, 'notifications', ticketId), { status: 'Revoked' }); 
       }
   };
 
-  // Submit Feedback (Client)
   const handleTicketFeedback = async (ticketId: string, rating: number, feedback: string) => {
       await updateDoc(doc(db, 'notifications', ticketId), { 
           rating,
@@ -278,18 +271,15 @@ const App: React.FC = () => {
       });
   };
 
-  // --- PURGE SYSTEM LOGIC ---
   const handlePurgeSystem = async () => {
       if (!confirm("CRITICAL WARNING:\n\nThis will PERMANENTLY DELETE all:\n- Invoices\n- Clients\n- Payments\n- Support Tickets\n\nThis action cannot be undone. Are you sure you want to proceed?")) {
           return;
       }
-      
       if (!confirm("Final Confirmation: Do you really want to wipe the database?")) return;
 
       setLoading(true);
       try {
           const collections = ['invoices', 'clients', 'payments', 'notifications'];
-          
           for (const colName of collections) {
               const q = query(collection(db, colName));
               const snapshot = await getDocs(q);
@@ -305,10 +295,8 @@ const App: React.FC = () => {
       }
   };
 
-  // --- RESTORE SYSTEM LOGIC ---
   const handleRestoreSystem = async (backupData: any) => {
     if (!confirm("WARNING: You are about to overwrite/merge the current database with this backup.\n\nExisting records with matching IDs will be updated. New records will be added.\n\nAre you sure you want to proceed?")) return;
-    
     setLoading(true);
     try {
       const collections = [
@@ -322,94 +310,76 @@ const App: React.FC = () => {
       for (const col of collections) {
         if (Array.isArray(backupData[col.key])) {
           for (const item of backupData[col.key]) {
-            // Ensure ID exists, if not generate one or skip? Assuming valid backup has IDs.
             if (item.id) {
                await setDoc(doc(db, col.dbName, item.id), item);
             }
           }
         }
       }
-      
-      alert("System Restore Complete. Database has been updated from the backup file.");
+      alert("System Restore Complete.");
     } catch (e) {
       console.error(e);
-      alert("Error restoring data. Please ensure the file is a valid system backup.");
+      alert("Error restoring data.");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- CLOSE FINANCIAL YEAR LOGIC (UPDATED: ARCHIVE ALL & CHUNK) ---
   const handleCloseFinancialYear = async () => {
-    const confirmMsg = `CLOSE FINANCIAL YEAR & ARCHIVE DATA?\n\nThis action will:\n1. Move all current Invoices, Payments, and Tickets to the 'Archived' state.\n2. Your Admin Dashboard will be reset to ZERO.\n3. Clients will STILL see their history in the Client Portal.\n\nSAFE DATA:\n- Client Master Records will NOT be deleted.\n- Branch Configurations will NOT be deleted.\n\nAre you sure you want to proceed?`;
-    
-    if (!confirm(confirmMsg)) return;
-    if (!confirm("Double Check: Have you downloaded your Backup/Reports?")) return;
-
+    if (!confirm("CLOSE FINANCIAL YEAR & ARCHIVE DATA?\n\nThis action will archive all current data. Proceed?")) return;
     setLoading(true);
     try {
         const collectionsToArchive = ['invoices', 'payments', 'notifications'];
         let batch = writeBatch(db);
         let opCount = 0;
-        let totalArchived = 0;
 
         for (const colName of collectionsToArchive) {
-             // Retrieve ALL documents to ensure even legacy ones without 'archived' field are processed
              const snapshot = await getDocs(collection(db, colName));
-             
              snapshot.docs.forEach((docSnap) => {
                  const data = docSnap.data();
-                 // Archive if it's not already archived (checks for false or undefined)
                  if (data.archived !== true) {
                      batch.update(docSnap.ref, { archived: true });
                      opCount++;
-                     totalArchived++;
                  }
-
-                 // Firestore Batch Limit is 500, chunk at 450 for safety
                  if (opCount >= 450) {
                      batch.commit();
-                     batch = writeBatch(db); // Start new batch
+                     batch = writeBatch(db);
                      opCount = 0;
                  }
              });
         }
-        
-        if (opCount > 0) {
-            await batch.commit();
-        }
-        
-        alert(`Financial Year Closed Successfully.\n${totalArchived} records have been archived. Dashboard is now Zero.`);
+        if (opCount > 0) await batch.commit();
+        alert(`Financial Year Closed Successfully.`);
     } catch(e) {
         console.error(e);
-        alert("Error closing financial year. Please check console for details.");
+        alert("Error closing financial year.");
     } finally {
         setLoading(false);
     }
   };
 
-  // --- FILTERED DATA FOR ADMIN (Exclude Archived) ---
+  // --- FILTERED DATA ---
   const activeInvoices = useMemo(() => invoices.filter(i => !i.archived), [invoices]);
   const activePayments = useMemo(() => payments.filter(p => !p.archived), [payments]);
   const activeNotifications = useMemo(() => notifications.filter(n => !n.archived), [notifications]);
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600 font-bold animate-pulse">Loading Cloud Resources...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-gray-50 text-blue-600 font-bold animate-pulse">Loading Resources...</div>;
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
   }
 
-  // --- CLIENT PORTAL ROUTING ---
+  // --- CLIENT PORTAL ---
   if (user.isClient) {
     const currentClient = clients.find(c => c.id === user.clientId);
     return (
       <ClientPortal 
          user={user}
          clientData={currentClient}
-         invoices={invoices} // Pass ALL invoices (history preserved)
-         payments={payments} // Pass ALL payments (history preserved)
+         invoices={invoices} 
+         payments={payments} 
          branches={branches}
-         notifications={notifications.filter(n => n.clientId === user.clientId)} // Pass all tickets for client
+         notifications={notifications.filter(n => n.clientId === user.clientId)}
          onLogout={handleLogout}
          onSendMessage={handleClientMessage}
          onFeedback={handleTicketFeedback}
@@ -417,26 +387,28 @@ const App: React.FC = () => {
       />
     );
   }
-  // -----------------------------
 
-  // --- FILTER DATA FOR BRANCH MANAGERS (Admin Side) ---
-  const isBranchManager = userProfile?.role === UserRole.BRANCH_MANAGER;
-  const allowedBranches = isBranchManager && userProfile?.allowedBranchIds 
+  // --- ROLE BASED ACCESS LOGIC ---
+  const currentUserRole = userProfile?.role || UserRole.ADMIN; // Default to Admin for fallback
+  const isBranchManager = currentUserRole === UserRole.BRANCH_MANAGER;
+  const isAccountant = currentUserRole === UserRole.ACCOUNTANT;
+  
+  // Branch Managers/Accountants restricted to specific branches
+  const allowedBranches = (isBranchManager || isAccountant) && userProfile?.allowedBranchIds.length 
     ? branches.filter(b => userProfile.allowedBranchIds.includes(b.id)) 
     : branches;
 
-  // Filter Notifications for Branch Manager
+  // Branch Managers see tickets for their branch
   const filteredNotifications = isBranchManager 
      ? activeNotifications.filter(n => userProfile?.allowedBranchIds.includes(n.branchId))
      : activeNotifications;
-  // ---------------------------------------
 
   const renderModule = () => {
     switch (activeModule) {
       case 'Dashboard':
         return (
           <Dashboard 
-            invoices={activeInvoices} // Admin sees only active year
+            invoices={activeInvoices}
             clients={clients} 
             branches={allowedBranches} 
             payments={activePayments}
@@ -444,6 +416,7 @@ const App: React.FC = () => {
           />
         );
       case 'Notifications':
+        if (isAccountant) return <div className="p-10 text-center text-gray-400 font-bold">Access Restricted</div>;
         return (
             <Notifications 
                 notifications={filteredNotifications} 
@@ -469,7 +442,7 @@ const App: React.FC = () => {
         }
         return (
           <InvoiceList 
-            invoices={activeInvoices} // Admin sees only active year
+            invoices={activeInvoices}
             clients={clients}
             branches={allowedBranches}
             onNewInvoice={() => {
@@ -492,18 +465,18 @@ const App: React.FC = () => {
       case 'Clients':
         return <Clients clients={clients} setClients={handleUpdateClients} branches={allowedBranches} onDeleteClient={handleDeleteClient} />;
       case 'Branches':
-        // Only Admin can access, Sidebar should hide it but double check
-        if (isBranchManager) return <div>Access Denied</div>;
+        if (isBranchManager || isAccountant) return <div className="p-10 text-center text-gray-400 font-bold">Access Restricted</div>;
         return <Branches branches={branches} setBranches={handleUpdateBranches} />;
       case 'Accounts':
+        if (isAccountant) return <div className="p-10 text-center text-gray-400 font-bold">Access Restricted</div>;
         return <Accounts invoices={activeInvoices} payments={activePayments} clients={clients} />;
       case 'Scanner':
         return <Scanner invoices={activeInvoices} payments={activePayments} />;
       case 'Settings':
-        if (isBranchManager) return <div>Access Denied</div>;
+        if (isBranchManager || isAccountant) return <div className="p-10 text-center text-gray-400 font-bold">Access Restricted</div>;
         return (
           <Settings 
-            state={{ invoices, clients, branches, payments, notifications }} // Backup everything, including archived
+            state={{ invoices, clients, branches, payments, notifications }} 
             onAddUser={handleAddUser}
             onPurgeData={handlePurgeSystem}
             onCloseFinancialYear={handleCloseFinancialYear}
@@ -511,15 +484,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return (
-          <Dashboard 
-            invoices={activeInvoices} 
-            clients={clients} 
-            branches={allowedBranches} 
-            payments={activePayments}
-            onRecordPayment={handleRecordPayment}
-          />
-        );
+        return null;
     }
   };
 
@@ -531,11 +496,11 @@ const App: React.FC = () => {
           setActiveModule(m);
           setShowCreation(false);
           setEditingInvoice(null);
-          setIsSidebarOpen(false); // Close sidebar on mobile when module changes
+          setIsSidebarOpen(false);
         }}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        userRole={userProfile?.role}
+        userRole={currentUserRole}
       />
       
       <div className="flex-1 flex flex-col min-w-0">

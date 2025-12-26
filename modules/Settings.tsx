@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { 
   Palette, 
@@ -15,7 +14,9 @@ import {
   UserPlus,
   Users,
   CalendarClock,
-  Upload
+  Upload,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Invoice, Client, Branch, Payment, UserRole, UserProfile, AppNotification } from '../types';
 
@@ -38,8 +39,10 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
     email: '',
     displayName: '',
     role: UserRole.ACCOUNTANT,
-    branchId: 'ALL'
+    branchId: 'ALL',
+    password: ''
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,17 +80,21 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
   };
 
   const handleCreateUser = async () => {
-    if (!newUser.email || !newUser.displayName || !onAddUser) return;
+    if (!newUser.email || !newUser.displayName || !newUser.password || !onAddUser) {
+        alert("All fields including Password are required.");
+        return;
+    }
     setIsAddingUser(true);
     try {
       await onAddUser({
         email: newUser.email,
         displayName: newUser.displayName,
         role: newUser.role,
-        allowedBranchIds: newUser.branchId === 'ALL' ? [] : [newUser.branchId] // Empty array usually implies all or handled by logic
+        allowedBranchIds: newUser.branchId === 'ALL' ? [] : [newUser.branchId],
+        password: newUser.password
       });
-      alert('User access record created in Cloud. Instruct user to sign up with this email.');
-      setNewUser({ email: '', displayName: '', role: UserRole.ACCOUNTANT, branchId: 'ALL' });
+      alert('User access record created successfully. They can now log in.');
+      setNewUser({ email: '', displayName: '', role: UserRole.ACCOUNTANT, branchId: 'ALL', password: '' });
     } catch (e) {
       console.error(e);
       alert('Failed to add user record.');
@@ -111,7 +118,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
 
         <div className="divide-y divide-gray-100">
           
-          {/* User Management Section (New) */}
+          {/* User Management Section */}
           <div className="p-10 space-y-8">
             <div className="flex items-center space-x-3">
               <Users size={20} className="text-[#0854a0]" />
@@ -127,6 +134,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
                     className="w-full h-12 rounded-xl border border-gray-200 px-4 text-xs font-bold"
                     value={newUser.displayName}
                     onChange={(e) => setNewUser({...newUser, displayName: e.target.value})}
+                    placeholder="e.g. John Doe"
                   />
                 </div>
                 <div className="space-y-2">
@@ -136,6 +144,7 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
                     className="w-full h-12 rounded-xl border border-gray-200 px-4 text-xs font-bold"
                     value={newUser.email}
                     onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                    placeholder="user@vedartha.com"
                   />
                 </div>
                 <div className="space-y-2">
@@ -159,11 +168,31 @@ const Settings: React.FC<SettingsProps> = ({ state, onAddUser, onPurgeData, onCl
                     {state?.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
+                
+                {/* Password Field */}
+                <div className="space-y-2 col-span-2">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Assign Password</label>
+                  <div className="relative">
+                      <input 
+                        type={showPassword ? "text" : "password"} 
+                        className="w-full h-12 rounded-xl border border-gray-200 px-4 text-xs font-bold focus:border-[#0854a0] outline-none"
+                        value={newUser.password}
+                        onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                        placeholder="Set a secure password for this user"
+                      />
+                      <button 
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                  </div>
+                </div>
               </div>
               <button 
                 onClick={handleCreateUser}
                 disabled={isAddingUser}
-                className="flex items-center px-6 py-3 bg-[#0854a0] text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-[#064280] transition-all shadow-lg"
+                className="flex items-center px-6 py-3 bg-[#0854a0] text-white rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-[#064280] transition-all shadow-lg w-full justify-center"
               >
                 <UserPlus size={16} className="mr-2" /> {isAddingUser ? 'Provisioning...' : 'Provision User Access'}
               </button>

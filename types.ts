@@ -13,6 +13,7 @@ export interface UserProfile {
   allowedBranchIds: string[]; // 'ALL' or specific IDs
   displayName: string;
   clientId?: string; // Links a user to a specific client record
+  password?: string; // Optional: stored for custom auth flow in this demo
 }
 
 export interface Address {
