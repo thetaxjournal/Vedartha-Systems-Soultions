@@ -58,20 +58,35 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        // Default Admin Role for Firebase Auth Users
-        const mockProfile: UserProfile = {
-            uid: currentUser.uid,
-            email: currentUser.email || '',
-            displayName: currentUser.displayName || 'Administrator',
-            role: UserRole.ADMIN, // Firebase Auth logins are implicitly Admins in this setup
-            allowedBranchIds: [] 
-        };
-        setUserProfile(mockProfile);
+        
+        // CHECK Firestore 'users' collection for this email to find specific role assignments
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', currentUser.email));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+            const userData = querySnapshot.docs[0].data();
+            setUserProfile({
+                uid: querySnapshot.docs[0].id,
+                email: userData.email,
+                displayName: userData.displayName,
+                role: userData.role as UserRole,
+                allowedBranchIds: userData.allowedBranchIds || []
+            });
+        } else {
+            // Default Admin Role for Firebase Auth Users NOT found in the 'users' collection
+            // This allows the initial root admin who signs up via Firebase to gain full access.
+            const mockProfile: UserProfile = {
+                uid: currentUser.uid,
+                email: currentUser.email || '',
+                displayName: currentUser.displayName || 'Administrator',
+                role: UserRole.ADMIN,
+                allowedBranchIds: [] 
+            };
+            setUserProfile(mockProfile);
+        }
       } else {
-        // If not Firebase Auth, check if we have a manually set user (Custom Staff/Client)
         // If user is null but we set it manually in handleLogin, don't reset unless explicitly logging out
-        // The onAuthStateChanged might fire with null on load if not persisted
-        // We handle persistence manually or rely on session
       }
       setLoading(false);
     });
@@ -163,7 +178,7 @@ const App: React.FC = () => {
             allowedBranchIds: userObj.allowedBranchIds || []
         });
     }
-    // Note: Firebase Auth users are handled in useEffect
+    // Note: Firebase Auth users (including Google) are handled in useEffect listener
   };
 
   const handleLogout = () => {
